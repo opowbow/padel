@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --court-green: #10b981;
+    --volt-lime: #ccff00;
+    --padel-blue: #0284c7;
+    --electric-orange: #ff5722;
+  }
+
+  body {
+    @apply bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-lime-400 selection:text-black;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(204, 255, 0, 0.5);
+}
+
+/* Glow effects */
+.glow-lime {
+  box-shadow: 0 0 25px -5px rgba(204, 255, 0, 0.35);
+}
+
+.glow-blue {
+  box-shadow: 0 0 25px -5px rgba(14, 165, 233, 0.35);
+}
+
+.padel-gradient-bg {
+  background: radial-gradient(circle at 15% 15%, rgba(204, 255, 0, 0.08) 0%, transparent 40%),
+              radial-gradient(circle at 85% 85%, rgba(14, 165, 233, 0.1) 0%, transparent 40%),
+              radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.05) 0%, transparent 60%);
+}
