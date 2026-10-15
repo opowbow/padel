@@ -1,32 +1,78 @@
-# React + TypeScript + Vite
+# PadelSlay 🎾⚡
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+> **Padel Mixin Magic & Winter League Management App**
 
-Currently, two official plugins are available:
+PadelSlay (PlaySlay) is a modern, mobile-first web application designed for padel clubs, social groups, and competitive leagues to organize games, manage sign-ups, and track player rankings.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## ✨ Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **🏟️ Interactive Court & Game Slots**:
+  - Visual 2v2 court layout with Drive (Left) and Revés (Right) player positioning.
+  - Quick slot reservations for casual games, Americanos, and league matches.
+  - Indoor/outdoor indicators, start times, durations, and court locations.
 
-## Expanding the Oxlint configuration
+- **🏆 Winter League Standings & Dynamic Scoring**:
+  - Live league ladder tracking matches played, win/loss records, point differential, and recent form.
+  - Advanced weighted match scoring breakdown accounting for set scores, game differentials, and opponent ratings.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+- **⭐ Most Improved & Weekly Awards**:
+  - Automated weekly spotlights highlighting standout performers, rating jumps, win streaks, and point deltas.
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+- **👥 Member Roster & Flexible Sign-Up**:
+  - 4 distinct sign-up pathways: *Mixin Sessions*, *Winter League*, *All-Access (Both)*, and *Casual Member*.
+  - Player profiles with Playtomic-style ratings, dominant hand, preferred play side, and match stats.
+
+- **📱 Mobile-First Design**:
+  - Responsive layout with desktop preview framing, bottom navigation, and clean dark-mode UI.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend**: [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Vite](https://vitejs.dev/)
+- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
+- **Icons**: [Lucide React](https://lucide.dev/)
+- **Effects**: [canvas-confetti](https://www.npmjs.com/package/canvas-confetti)
+- **Deployment**: Multi-stage [Docker](https://www.docker.com/) container served with [Nginx](https://nginx.org/) on [Google Cloud Run](https://cloud.google.com/run).
+
+---
+
+## 🚀 Getting Started
+
+### Local Development
+
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+2. **Start the development server**:
+   ```bash
+   npm run dev
+   ```
+
+3. **Build for production**:
+   ```bash
+   npm run build
+   ```
+
+---
+
+## 🐳 Docker & Cloud Run Deployment
+
+Deploy directly to Google Cloud Run using the included one-click script:
+
+```bash
+./deploy-cloudrun.sh
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Or build and run locally with Docker:
+
+```bash
+docker build -t padelslay:latest .
+docker run -p 8080:8080 padelslay:latest
+```
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for full deployment instructions and GCP setup steps.
