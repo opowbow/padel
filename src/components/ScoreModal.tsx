@@ -153,7 +153,7 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
         {/* Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-lime-400 text-slate-950">
+            <div className="p-2 rounded-xl bg-sky-400 text-slate-950">
               <Trophy className="w-5 h-5 font-bold" />
             </div>
             <div>
@@ -198,24 +198,28 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
               <label className="block text-xs font-semibold text-slate-300 mb-1">
                 Court Location
               </label>
-              <input
-                type="text"
+              <select
                 value={courtName}
                 onChange={(e) => setCourtName(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-white focus:outline-none focus:border-lime-400"
-              />
+                className="w-full px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-white focus:outline-none focus:border-pink-500 text-xs"
+              >
+                <option value="Court 1 - Pink Glass Arena (Indoor)">Court 1 - Pink Glass Arena (Indoor)</option>
+                <option value="Court 2 - Sunset Court (Indoor)">Court 2 - Sunset Court (Indoor)</option>
+                <option value="Court 3 - Electric Blue Skyline (Outdoor)">Court 3 - Electric Blue Skyline (Outdoor)</option>
+                <option value="Court 4 - Center Court Pro (Indoor)">Court 4 - Center Court Pro (Indoor)</option>
+              </select>
             </div>
           </div>
 
           {/* Teams Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Team A */}
-            <div className="p-4 rounded-2xl bg-lime-500/10 border border-lime-400/30 space-y-3">
+            <div className="p-4 rounded-2xl bg-pink-500/10 border border-pink-400/30 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-lime-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-lime-400"></span> Team A (North)
+                <span className="text-xs font-black text-pink-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-pink-500"></span> Team A (Drive & Revés)
                 </span>
-                <span className="text-xs font-mono text-lime-300">
+                <span className="text-xs font-mono text-pink-300">
                   Avg: {(((pA1.rankingScore + pA2.rankingScore) / 2)).toFixed(2)}
                 </span>
               </div>
@@ -225,7 +229,7 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
                 <select
                   value={teamAPlayer1Id}
                   onChange={(e) => setTeamAPlayer1Id(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-lime-400"
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-pink-400"
                 >
                   {players.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -240,7 +244,7 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
                 <select
                   value={teamAPlayer2Id}
                   onChange={(e) => setTeamAPlayer2Id(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-lime-400"
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-pink-400"
                 >
                   {players.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -252,12 +256,12 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
             </div>
 
             {/* Team B */}
-            <div className="p-4 rounded-2xl bg-cyan-500/10 border border-cyan-400/30 space-y-3">
+            <div className="p-4 rounded-2xl bg-sky-500/10 border border-sky-400/30 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400"></span> Team B (South)
+                <span className="text-xs font-black text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-sky-400"></span> Team B (Drive & Revés)
                 </span>
-                <span className="text-xs font-mono text-cyan-300">
+                <span className="text-xs font-mono text-sky-300">
                   Avg: {(((pB1.rankingScore + pB2.rankingScore) / 2)).toFixed(2)}
                 </span>
               </div>
@@ -392,13 +396,13 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
             <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs">
               <div>
                 <span className="text-slate-400">Team A Points Won: </span>
-                <span className="font-bold text-lime-400 font-mono text-sm">{totalPointsA}</span>
+                <span className="font-bold text-sky-400 font-mono text-sm">{totalPointsA}</span>
                 <span className="text-slate-500 ml-1">({setsWonA} sets)</span>
               </div>
               <div className="text-slate-500 font-bold">vs</div>
               <div>
                 <span className="text-slate-400">Team B Points Won: </span>
-                <span className="font-bold text-cyan-400 font-mono text-sm">{totalPointsB}</span>
+                <span className="font-bold text-blue-400 font-mono text-sm">{totalPointsB}</span>
                 <span className="text-slate-500 ml-1">({setsWonB} sets)</span>
               </div>
             </div>
@@ -417,20 +421,20 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className={`p-3 rounded-xl border ${winnerTeam === 'A' ? 'bg-lime-950/60 border-lime-400/60 ring-1 ring-lime-400/30' : 'bg-slate-900 border-slate-800'}`}>
+              <div className={`p-3 rounded-xl border ${winnerTeam === 'A' ? 'bg-sky-950/60 border-sky-400/60 ring-1 ring-sky-400/30' : 'bg-slate-900 border-slate-800'}`}>
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs font-bold text-lime-400">Team A Award</span>
-                  {winnerTeam === 'A' && <span className="text-[10px] font-black bg-lime-400 text-slate-950 px-1.5 py-0.2 rounded font-mono">WIN</span>}
+                  <span className="text-xs font-bold text-sky-400">Team A Award</span>
+                  {winnerTeam === 'A' && <span className="text-[10px] font-black bg-sky-400 text-slate-950 px-1.5 py-0.2 rounded font-mono">WIN</span>}
                 </div>
                 <div className="text-2xl font-black font-mono text-white">
                   +{previewBreakdown.totalTeamAPoints} <span className="text-xs font-sans text-slate-400">league pts</span>
                 </div>
               </div>
 
-              <div className={`p-3 rounded-xl border ${winnerTeam === 'B' ? 'bg-cyan-950/60 border-cyan-400/60 ring-1 ring-cyan-400/30' : 'bg-slate-900 border-slate-800'}`}>
+              <div className={`p-3 rounded-xl border ${winnerTeam === 'B' ? 'bg-blue-950/60 border-blue-400/60 ring-1 ring-blue-400/30' : 'bg-slate-900 border-slate-800'}`}>
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs font-bold text-cyan-400">Team B Award</span>
-                  {winnerTeam === 'B' && <span className="text-[10px] font-black bg-cyan-400 text-slate-950 px-1.5 py-0.2 rounded font-mono">WIN</span>}
+                  <span className="text-xs font-bold text-blue-400">Team B Award</span>
+                  {winnerTeam === 'B' && <span className="text-[10px] font-black bg-blue-400 text-slate-950 px-1.5 py-0.2 rounded font-mono">WIN</span>}
                 </div>
                 <div className="text-2xl font-black font-mono text-white">
                   +{previewBreakdown.totalTeamBPoints} <span className="text-xs font-sans text-slate-400">league pts</span>
@@ -453,9 +457,9 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
           <div className="pt-2">
             <button
               type="submit"
-              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-lime-400 via-lime-500 to-emerald-500 text-slate-950 font-black text-sm uppercase tracking-wider shadow-lg shadow-lime-500/20 hover:brightness-110 active:scale-[0.99] transition flex items-center justify-center gap-2"
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-sky-500/25 active:scale-[0.99] transition flex items-center justify-center gap-2"
             >
-              <CheckCircle className="w-5 h-5" />
+              <CheckCircle className="w-5 h-5 font-bold" />
               <span>Record Score & Update Standings</span>
             </button>
           </div>

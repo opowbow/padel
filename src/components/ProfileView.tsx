@@ -60,12 +60,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Profile Overview Card */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-sky-950 to-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl">
-        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 relative z-10">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-sky-950/30 to-slate-900 border border-slate-800 p-4 sm:p-8 shadow-2xl">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6 relative z-10">
           <img
             src={currentPlayer.avatar}
             alt={currentPlayer.name}
-            className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover ring-4 ring-lime-400/50 shadow-xl"
+            className="w-22 h-22 sm:w-28 sm:h-28 rounded-2xl object-cover ring-4 ring-sky-500/50 shadow-xl"
           />
 
           <div className="flex-1 text-center sm:text-left space-y-2">
@@ -93,29 +93,29 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             )}
           </div>
 
-          <div className="flex sm:flex-col gap-2">
+          <div className="flex sm:flex-col gap-2 w-full sm:w-auto">
             <button
               onClick={onOpenSignUp}
-              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-2 border border-slate-700 transition"
+              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-2 border border-slate-700 transition w-full sm:w-auto"
             >
-              <UserPlus className="w-3.5 h-3.5 text-lime-400" />
+              <UserPlus className="w-3.5 h-3.5 text-sky-400" />
               <span>+ Add New Player</span>
             </button>
           </div>
         </div>
 
         {/* Quick Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-slate-800/80">
-          <div className="p-3 rounded-2xl bg-slate-800/50 border border-slate-700/60 text-center">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mt-6 pt-6 border-t border-slate-800/80">
+          <div className="p-3 rounded-2xl bg-slate-850 border border-slate-750 text-center">
             <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Calculated Rating
             </span>
-            <span className="text-2xl font-black font-mono text-lime-400">
+            <span className="text-2xl font-black font-mono text-sky-400">
               {currentPlayer.rankingScore.toFixed(2)}
             </span>
           </div>
 
-          <div className="p-3 rounded-2xl bg-slate-800/50 border border-slate-700/60 text-center">
+          <div className="p-3 rounded-2xl bg-slate-850 border border-slate-750 text-center">
             <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Matches Won / Total
             </span>
@@ -124,20 +124,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </span>
           </div>
 
-          <div className="p-3 rounded-2xl bg-slate-800/50 border border-slate-700/60 text-center">
+          <div className="p-3 rounded-2xl bg-slate-850 border border-slate-750 text-center">
             <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Win Rate
             </span>
-            <span className="text-2xl font-black font-mono text-cyan-400">
+            <span className="text-2xl font-black font-mono text-sky-400">
               {winRate}%
             </span>
           </div>
 
-          <div className="p-3 rounded-2xl bg-slate-800/50 border border-slate-700/60 text-center">
+          <div className="p-3 rounded-2xl bg-slate-850 border border-slate-750 text-center">
             <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Weekly Points Gained
             </span>
-            <span className="text-2xl font-black font-mono text-amber-400 flex items-center justify-center gap-1">
+            <span className="text-2xl font-black font-mono text-orange-400 flex items-center justify-center gap-1">
               <TrendingUp className="w-4 h-4" />+{currentPlayer.weeklyPointsGained}
             </span>
           </div>
@@ -145,11 +145,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       </div>
 
       {/* Edit Ranking & Preferences Form */}
-      <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-6 shadow-2xl space-y-5">
+      <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-4 sm:p-6 shadow-2xl space-y-5">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-lime-400" />
+              <ShieldCheck className="w-4 h-4 text-sky-400" />
               Update Your Padel Ranking & Skill Level
             </h3>
             <p className="text-xs text-slate-400">
@@ -178,7 +178,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   onClick={() => setRankingMode('preset')}
                   className={`px-3 py-1 text-xs font-semibold rounded-md transition ${
                     rankingMode === 'preset'
-                      ? 'bg-lime-400 text-slate-950 font-bold'
+                      ? 'bg-sky-500 text-slate-950 font-black'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -189,7 +189,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   onClick={() => setRankingMode('manual')}
                   className={`px-3 py-1 text-xs font-semibold rounded-md transition ${
                     rankingMode === 'manual'
-                      ? 'bg-lime-400 text-slate-950 font-bold'
+                      ? 'bg-sky-500 text-slate-950 font-black'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -206,7 +206,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 <select
                   value={selectedPresetIndex}
                   onChange={(e) => setSelectedPresetIndex(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-lime-400"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-sky-400 text-xs"
                 >
                   {RANKING_PRESETS.map((preset, index) => (
                     <option key={preset.level} value={index}>
@@ -228,7 +228,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   value={manualText}
                   onChange={(e) => setManualText(e.target.value)}
                   placeholder="e.g. Level 3.75 - Intermediate Plus / Playtomic 4.1"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-lime-400"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-sky-400 text-xs"
                 />
                 <p className="text-[11px] text-slate-400">
                   You can enter your exact club rating (e.g. "Playtomic 3.8", "LTA 4.2", "Beginner 1.5"). The engine extracts numeric values automatically for league calculations.
@@ -249,7 +249,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
 
           {/* Preferences */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
                 Preferred Court Side
@@ -257,7 +257,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <select
                 value={playSide}
                 onChange={(e) => setPlaySide(e.target.value as PlaySide)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-lime-400"
+                className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-sky-400 text-xs"
               >
                 <option value="Left (Drive)">Left Side (Drive - Play Builder)</option>
                 <option value="Right (Revés)">Right Side (Revés - Finisher)</option>
@@ -272,7 +272,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <select
                 value={dominantHand}
                 onChange={(e) => setDominantHand(e.target.value as DominantHand)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-lime-400"
+                className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-sky-400 text-xs"
               >
                 <option value="Right">Right-Handed</option>
                 <option value="Left">Left-Handed</option>
@@ -288,13 +288,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               rows={2}
               value={bio}
               onChange={(e) => setBio(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-lime-400 text-xs"
+              className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-sky-400 text-xs"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full py-3 px-4 rounded-xl bg-lime-400 hover:bg-lime-300 text-slate-950 font-black text-xs uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-lg shadow-lime-400/20"
+            className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-xs uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-lg shadow-sky-500/25"
           >
             <Save className="w-4 h-4 font-bold" />
             <span>Save Profile & Ranking Changes</span>

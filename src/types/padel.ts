@@ -126,3 +126,85 @@ export interface WeeklyAward {
   commentary: string;
   badge: string;
 }
+
+export type MemberStatus = 'Active League Player' | 'Interested in Winter League' | 'Looking for Mixin Group' | 'Weekend Social';
+
+export interface InterestedMember {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  avatar: string;
+  rankingText: string;
+  rankingScore: number;
+  status: MemberStatus;
+  preferredDays: string;
+  notes?: string;
+  joinedDate: string;
+}
+
+export type SignUpOption = 'mixin' | 'league' | 'both' | 'casual';
+
+export interface SignUpOptionConfig {
+  id: SignUpOption;
+  label: string;
+  badge: string;
+  tagline: string;
+  description: string;
+  gradient: string;
+  borderActive: string;
+  memberStatus: MemberStatus;
+  includesLeague: boolean;
+  includesMixin: boolean;
+}
+
+export const SIGN_UP_OPTIONS: SignUpOptionConfig[] = [
+  {
+    id: 'mixin',
+    label: 'Sign up for mixin',
+    badge: 'Social & Americanos',
+    tagline: 'Casual Sessions & Swaps',
+    description: 'Get matched into fast-paced 4-player social games, partner rotations, and Americanos. Perfect for flexible play.',
+    gradient: 'from-sky-500/15 via-blue-900/30 to-indigo-900/20',
+    borderActive: 'border-sky-400 ring-2 ring-sky-400/40',
+    memberStatus: 'Looking for Mixin Group',
+    includesLeague: false,
+    includesMixin: true,
+  },
+  {
+    id: 'league',
+    label: 'Sign up for League',
+    badge: 'Championship Division',
+    tagline: 'Winter Padel Slay League',
+    description: 'Enter the official competitive ladder with points won/lost tracking, upset multipliers, and weekly leaderboard rankings.',
+    gradient: 'from-orange-500/15 via-red-900/30 to-amber-900/20',
+    borderActive: 'border-orange-400 ring-2 ring-orange-400/40',
+    memberStatus: 'Active League Player',
+    includesLeague: true,
+    includesMixin: false,
+  },
+  {
+    id: 'both',
+    label: 'Sign up for both',
+    badge: 'All-Access Pass • Most Popular',
+    tagline: 'Mixin Magic + Winter League',
+    description: 'Full all-access pass: play in daily Mixin Magic sessions and compete in the Winter Padel Slay League for maximum court action.',
+    gradient: 'from-sky-500/20 via-blue-600/20 to-pink-500/20',
+    borderActive: 'border-sky-400 ring-2 ring-sky-400/50 shadow-lg shadow-sky-500/20',
+    memberStatus: 'Active League Player',
+    includesLeague: true,
+    includesMixin: true,
+  },
+  {
+    id: 'casual',
+    label: 'Sign up as casual member',
+    badge: 'Community Roster',
+    tagline: 'Weekend Social & Standby',
+    description: 'Join the PadelSlay community directory for weekend drop-ins, socials, last-minute replacement spots, and club updates.',
+    gradient: 'from-slate-800 via-slate-850 to-slate-900',
+    borderActive: 'border-slate-400 ring-2 ring-slate-400/40',
+    memberStatus: 'Weekend Social',
+    includesLeague: false,
+    includesMixin: false,
+  },
+];

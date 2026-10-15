@@ -2,16 +2,17 @@ import React, { useState } from 'react';
 import {
   Calendar,
   Clock,
-  Plus,
-  Users,
-  Trophy,
-  Euro,
   MapPin,
-  CheckCircle2,
-  XCircle,
+  Trophy,
+  Filter,
+  Plus,
   Sparkles,
+  Users,
+  CheckCircle2,
+  X,
+  UserPlus,
 } from 'lucide-react';
-import { Player, PadelGame, GameFormat } from '../types/padel';
+import { Player, PadelGame, GameFormat, SignUpOption } from '../types/padel';
 import { CourtGraphic } from './CourtGraphic';
 
 interface GamesViewProps {
@@ -21,6 +22,8 @@ interface GamesViewProps {
   onLeaveSlot: (gameId: string, slotKey: 'slot1' | 'slot2' | 'slot3' | 'slot4') => void;
   onCreateGame: (gameData: Omit<PadelGame, 'id' | 'status' | 'hostId' | 'hostName' | 'maxPlayers'>) => void;
   onOpenRecordScore: (game: PadelGame) => void;
+  onOpenSignUpOptions?: () => void;
+  currentPlan?: SignUpOption;
 }
 
 export const GamesView: React.FC<GamesViewProps> = ({
@@ -30,21 +33,24 @@ export const GamesView: React.FC<GamesViewProps> = ({
   onLeaveSlot,
   onCreateGame,
   onOpenRecordScore,
+  onOpenSignUpOptions,
+  currentPlan,
 }) => {
-  const [filter, setFilter] = useState<'all' | 'open' | 'my-games' | 'league'>('all');
+  const [filter, setFilter] = useState<'all' | 'mixin' | 'open' | 'my-games' | 'league'>('all');
+  const [courtFilter, setCourtFilter] = useState<string>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   // New game form state
-  const [courtName, setCourtName] = useState('Court 1 - Panoramic Glass (Indoor)');
-  const [location, setLocation] = useState('Metro Padel Club, Central');
+  const [courtName, setCourtName] = useState('Court 1 - Pink Glass Arena (Indoor)');
+  const [location, setLocation] = useState('PadelSlay Central Hub, Court 1');
   const [isIndoor, setIsIndoor] = useState(true);
   const [date, setDate] = useState('2026-10-16');
-  const [time, setTime] = useState('18:00');
+  const [time, setTime] = useState('18:30');
   const [durationMinutes, setDurationMinutes] = useState(90);
-  const [format, setFormat] = useState<GameFormat>('League Ranked Match');
+  const [format, setFormat] = useState<GameFormat>('Casual 4-Player');
   const [targetLevel, setTargetLevel] = useState('3.5 - 4.5');
   const [pricePerPlayer, setPricePerPlayer] = useState(14);
-  const [notes, setNotes] = useState('Competitive match. Bring your best vibes!');
+  const [notes, setNotes] = useState('Mixin Magic session! Bring your best energy.');
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,235 +65,264 @@ export const GamesView: React.FC<GamesViewProps> = ({
       targetLevel,
       pricePerPlayer,
       players: {
-        slot1: currentPlayer, // Host takes slot 1
-        slot2: undefined,
-        slot3: undefined,
-        slot4: undefined,
+        slot1: currentPlayer, // Host joins slot 1 by default
       },
       notes,
     });
     setShowCreateModal(false);
   };
 
-  const filteredGames = games.filter((g) => {
-    const isPlayerInGame = Object.values(g.players).some((p) => p?.id === currentPlayer.id);
-    if (filter === 'open') return g.status === 'open';
-    if (filter === 'my-games') return isPlayerInGame;
-    if (filter === 'league') return g.format === 'League Ranked Match';
+  const isPlayerInGame = (game: PadelGame, playerId: string) => {
+    return Object.values(game.players).some((p) => p?.id === playerId);
+  };
+
+  const getSlotKeyForPlayer = (game: PadelGame, playerId: string): ('slot1' | 'slot2' | 'slot3' | 'slot4') | null => {
+    if (game.players.slot1?.id === playerId) return 'slot1';
+    if (game.players.slot2?.id === playerId) return 'slot2';
+    if (game.players.slot3?.id === playerId) return 'slot3';
+    if (game.players.slot4?.id === playerId) return 'slot4';
+    return null;
+  };
+
+  const filteredGames = games.filter((game) => {
+    // Format / Status filter
+    if (filter === 'open' && game.status === 'full') return false;
+    if (filter === 'my-games' && !isPlayerInGame(game, currentPlayer.id)) return false;
+    if (filter === 'league' && (!game.leagueId || game.format !== 'League Ranked Match')) return false;
+    if (filter === 'mixin' && game.format !== 'Casual 4-Player' && game.format !== 'Americano') return false;
+
+    // Court filter
+    if (courtFilter !== 'all' && !game.courtName.toLowerCase().includes(courtFilter.toLowerCase())) {
+      return false;
+    }
+
     return true;
   });
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner & Action */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-sky-950 to-slate-900 border border-slate-800 p-6 shadow-2xl">
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-lime-400/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div className="space-y-5">
+      {/* Hero Action Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 sm:p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-sky-950/40 to-slate-900 border border-slate-800 shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 -mt-8 -mr-8 w-60 h-60 bg-sky-500/15 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-black tracking-wider bg-lime-400/20 text-lime-400 border border-lime-400/30 uppercase">
-                Group Match Booking
-              </span>
-              <span className="text-xs text-slate-400">4-Player Sessions</span>
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight">
-              Sign Up to Open Games
-            </h2>
-            <p className="text-sm text-slate-300 max-w-xl">
-              Lock in your court slot, team up with community players, and earn league points for every match played!
-            </p>
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-sky-500/15 text-sky-400 border border-sky-500/30 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+              Mixin Magic
+            </span>
+            <span className="text-xs font-bold text-slate-400">
+              4-Player Court Group Booking
+            </span>
           </div>
+          <h2 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight">
+            Court Bookings & Mixin Sessions
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-xl mt-1">
+            Pick a court, sign up for open Drive & Revés slots, or host your own 4-player social or league match.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          <button
+            onClick={onOpenSignUpOptions}
+            className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-sky-500/25 hover:scale-105 active:scale-95 transition-all w-full sm:w-auto"
+          >
+            <UserPlus className="w-4 h-4 font-bold" />
+            <span>Sign Up</span>
+          </button>
 
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-lime-400 to-lime-500 hover:from-lime-300 hover:to-lime-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-lime-500/20 hover:scale-105 active:scale-95 transition-all"
+            className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-800 hover:bg-slate-750 text-white border border-slate-700 font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 active:scale-95 transition-all w-full sm:w-auto"
           >
-            <Plus className="w-4 h-4 font-bold" />
-            <span>+ Host New Game</span>
-          </button>
-        </div>
-
-        {/* Filter Pills */}
-        <div className="flex flex-wrap gap-2 mt-6 pt-4 border-t border-slate-800/80">
-          <button
-            onClick={() => setFilter('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-              filter === 'all'
-                ? 'bg-lime-400 text-slate-950'
-                : 'bg-slate-800/80 text-slate-400 hover:text-white'
-            }`}
-          >
-            All Bookings ({games.length})
-          </button>
-          <button
-            onClick={() => setFilter('open')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-              filter === 'open'
-                ? 'bg-lime-400 text-slate-950'
-                : 'bg-slate-800/80 text-slate-400 hover:text-white'
-            }`}
-          >
-            Open Spots Only
-          </button>
-          <button
-            onClick={() => setFilter('my-games')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-              filter === 'my-games'
-                ? 'bg-lime-400 text-slate-950'
-                : 'bg-slate-800/80 text-slate-400 hover:text-white'
-            }`}
-          >
-            My Signed-Up Games
-          </button>
-          <button
-            onClick={() => setFilter('league')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-              filter === 'league'
-                ? 'bg-lime-400 text-slate-950'
-                : 'bg-slate-800/80 text-slate-400 hover:text-white'
-            }`}
-          >
-            🏆 Official League Matches
+            <Plus className="w-4 h-4 font-bold text-sky-400" />
+            <span>+ Host Game Session</span>
           </button>
         </div>
       </div>
 
-      {/* Games Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Filter Tabs & Court Selector */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 p-3 rounded-2xl bg-slate-900/80 border border-slate-800">
+        {/* Category Filter Pills */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[
+            { id: 'all', label: 'All Sessions' },
+            { id: 'mixin', label: 'Mixin Magic' },
+            { id: 'open', label: 'Open Spots' },
+            { id: 'my-games', label: 'My Games' },
+            { id: 'league', label: 'Winter League' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setFilter(tab.id as any)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                filter === tab.id
+                  ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/25'
+                  : 'bg-slate-850 text-slate-400 hover:text-white hover:bg-slate-850 border border-slate-750'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Court Specific Filter */}
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-slate-400 font-bold shrink-0">Court:</span>
+          <select
+            value={courtFilter}
+            onChange={(e) => setCourtFilter(e.target.value)}
+            className="bg-slate-950 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-slate-700 focus:outline-none focus:border-sky-400"
+          >
+            <option value="all">🏟️ All Courts</option>
+            <option value="Court 1">Court 1 - Pink Glass Arena</option>
+            <option value="Court 2">Court 2 - Sunset Court</option>
+            <option value="Court 3">Court 3 - Electric Blue Skyline</option>
+            <option value="Court 4">Court 4 - Center Court Pro</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Games List Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {filteredGames.map((game) => {
-          const filledPlayers = Object.values(game.players).filter(Boolean);
-          const spotsLeft = 4 - filledPlayers.length;
-          const currentPlayerInGame = Object.entries(game.players).find(
-            ([_, p]) => p?.id === currentPlayer.id
-          );
+          const filledSlotsCount = Object.values(game.players).filter(Boolean).length;
+          const userIsInGame = isPlayerInGame(game, currentPlayer.id);
+          const userSlotKey = getSlotKeyForPlayer(game, currentPlayer.id);
 
           return (
             <div
               key={game.id}
-              className={`rounded-3xl border bg-slate-900/90 backdrop-blur-sm p-5 shadow-xl transition-all hover:border-slate-700 flex flex-col justify-between ${
-                currentPlayerInGame
-                  ? 'border-lime-500/50 ring-1 ring-lime-400/20'
-                  : 'border-slate-800'
-              }`}
+              className="rounded-3xl border border-slate-800 bg-slate-900/90 backdrop-blur-md p-4 sm:p-5 shadow-2xl flex flex-col justify-between space-y-3.5 hover:border-slate-700 transition"
             >
-              {/* Card Header */}
+              {/* Game Card Header with Prominent Court Name */}
               <div>
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-black uppercase tracking-wider text-lime-400">
-                        {game.format}
-                      </span>
-                      <span className="text-slate-500">•</span>
-                      <span className="text-xs text-slate-400 flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-slate-400" />
-                        {game.isIndoor ? 'Indoor Glass' : 'Outdoor Panoramic'}
-                      </span>
-                    </div>
-                    <h3 className="text-base font-black text-white">{game.courtName}</h3>
-                    <p className="text-xs text-slate-400">{game.location}</p>
-                  </div>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    {/* Court Badge */}
+                    <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-sky-500/15 text-sky-300 border border-sky-500/30 flex items-center gap-1">
+                      <span>🏟️</span>
+                      <span>{game.courtName}</span>
+                    </span>
 
-                  {/* Status Badge */}
-                  <div>
-                    {spotsLeft === 0 ? (
-                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30 flex items-center gap-1">
-                        Full (4/4)
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-lime-400/15 text-lime-400 border border-lime-400/30 flex items-center gap-1 animate-pulse">
-                        <Users className="w-3.5 h-3.5" />
-                        {spotsLeft} spot{spotsLeft > 1 ? 's' : ''} left!
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                      {game.format}
+                    </span>
+
+                    {game.leagueId && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/15 text-orange-400 border border-orange-500/30">
+                        Winter League
                       </span>
                     )}
                   </div>
+
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-xs font-black uppercase font-mono shrink-0 ${
+                      game.status === 'full'
+                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                        : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                    }`}
+                  >
+                    {filledSlotsCount}/4 Players
+                  </span>
                 </div>
 
-                {/* Match Details Bar */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 py-3 px-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-xs mb-4">
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <Calendar className="w-3.5 h-3.5 text-lime-400" />
-                    <span>{game.date}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <Clock className="w-3.5 h-3.5 text-lime-400" />
-                    <span>{game.time} ({game.durationMinutes}m)</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Lvl: {game.targetLevel}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <Euro className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>€{game.pricePerPlayer} / player</span>
-                  </div>
-                </div>
-
-                {/* Court Visualization */}
-                <div className="mb-4">
-                  <CourtGraphic
-                    players={game.players}
-                    interactive={true}
-                    onSlotClick={(slotKey) => {
-                      const existingPlayer = game.players[slotKey];
-                      if (existingPlayer) {
-                        if (existingPlayer.id === currentPlayer.id) {
-                          onLeaveSlot(game.id, slotKey);
-                        }
-                      } else {
-                        onJoinSlot(game.id, slotKey, currentPlayer);
-                      }
-                    }}
-                  />
+                <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-400 mt-2">
+                  <span className="flex items-center gap-1 text-slate-200 font-bold">
+                    <Calendar className="w-3.5 h-3.5 text-sky-400" />
+                    {game.date}
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1 text-slate-200 font-bold">
+                    <Clock className="w-3.5 h-3.5 text-sky-400" />
+                    {game.time} ({game.durationMinutes}m)
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1 text-slate-300">
+                    <MapPin className="w-3.5 h-3.5 text-orange-400" />
+                    {game.location}
+                  </span>
                 </div>
 
                 {game.notes && (
-                  <p className="text-xs text-slate-400 italic mb-4">
-                    💬 "{game.notes}" — <span className="text-slate-300 font-semibold">{game.hostName} (Host)</span>
+                  <p className="text-xs text-slate-300 italic mt-2.5 bg-slate-950/60 p-2.5 rounded-xl border border-slate-850">
+                    "{game.notes}"
                   </p>
                 )}
               </div>
 
-              {/* Bottom Actions */}
-              <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  {currentPlayerInGame ? (
-                    <span className="flex items-center gap-1.5 text-xs font-bold text-lime-400">
-                      <CheckCircle2 className="w-4 h-4 text-lime-400" />
-                      You are in this game ({currentPlayerInGame[0]})
-                    </span>
-                  ) : (
-                    <span className="text-xs text-slate-400">
-                      Click any open spot on court to join
-                    </span>
-                  )}
+              {/* 2D Padel Court Graphic with Team A & Team B Slots */}
+              <div className="my-1">
+                <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold mb-1 px-1">
+                  <span>Interactive Court Positions</span>
+                  <span className="text-sky-400">Tap open slot to sign up</span>
+                </div>
+
+                <CourtGraphic
+                  players={game.players}
+                  onSlotClick={(slotKey) => {
+                    if (game.players[slotKey]) {
+                      if (game.players[slotKey]?.id === currentPlayer.id) {
+                        onLeaveSlot(game.id, slotKey);
+                      }
+                    } else {
+                      onJoinSlot(game.id, slotKey, currentPlayer);
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Bottom Actions & User Status */}
+              <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+                <div className="text-xs">
+                  <span className="text-slate-400">Target Level: </span>
+                  <span className="font-bold text-white font-mono">{game.targetLevel}</span>
+                  <span className="mx-2 text-slate-600">•</span>
+                  <span className="text-slate-400">Price: </span>
+                  <span className="font-bold text-sky-400 font-mono">€{game.pricePerPlayer}</span>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {currentPlayerInGame && (
+                  {userIsInGame && userSlotKey ? (
                     <button
-                      onClick={() =>
-                        onLeaveSlot(
-                          game.id,
-                          currentPlayerInGame[0] as 'slot1' | 'slot2' | 'slot3' | 'slot4'
-                        )
-                      }
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 transition flex items-center gap-1"
+                      onClick={() => onLeaveSlot(game.id, userSlotKey)}
+                      className="px-4 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/40 text-xs font-bold transition"
                     >
-                      <XCircle className="w-3.5 h-3.5" />
-                      <span>Leave Match</span>
+                      Leave Slot
                     </button>
+                  ) : filledSlotsCount < 4 ? (
+                    <button
+                      onClick={() => {
+                        const firstOpen = !game.players.slot1
+                          ? 'slot1'
+                          : !game.players.slot2
+                          ? 'slot2'
+                          : !game.players.slot3
+                          ? 'slot3'
+                          : 'slot4';
+                        onJoinSlot(game.id, firstOpen, currentPlayer);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-black uppercase tracking-wider shadow-md shadow-sky-500/25 transition hover:scale-105 active:scale-95"
+                    >
+                      Quick Join Slot
+                    </button>
+                  ) : (
+                    <span className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-400 text-xs font-bold">
+                      Match Full
+                    </span>
                   )}
 
-                  {/* If match is ready or full, can record scores */}
-                  <button
-                    onClick={() => onOpenRecordScore(game)}
-                    className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-lime-400 hover:bg-lime-300 text-slate-950 transition flex items-center gap-1.5 shadow-md"
-                  >
-                    <Trophy className="w-3.5 h-3.5" />
-                    <span>Record Score</span>
-                  </button>
+                  {/* Record Score Button if filled */}
+                  {filledSlotsCount === 4 && (
+                    <button
+                      onClick={() => onOpenRecordScore(game)}
+                      className="px-3.5 py-2 rounded-xl bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border border-orange-500/40 text-xs font-bold flex items-center gap-1.5 transition"
+                    >
+                      <Trophy className="w-3.5 h-3.5" />
+                      <span>Record Score</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -295,27 +330,30 @@ export const GamesView: React.FC<GamesViewProps> = ({
         })}
       </div>
 
-      {filteredGames.length === 0 && (
-        <div className="p-12 text-center rounded-3xl bg-slate-900 border border-slate-800">
-          <p className="text-base font-bold text-slate-300">No matches found for this filter.</p>
-          <p className="text-xs text-slate-500 mt-1">Host a new game to get players on court!</p>
-        </div>
-      )}
-
       {/* Host New Game Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 bg-slate-800/80 border-b border-slate-700 flex items-center justify-between">
-              <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-lime-400" />
-                Host New 4-Player Match
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="relative w-full max-w-lg rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-sky-950/40 to-slate-900">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                  <Plus className="w-5 h-5 font-bold" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white uppercase tracking-tight">
+                    Host New Padel Game Session
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Set up court, format, and open up 4 player slots
+                  </p>
+                </div>
+              </div>
+
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="text-slate-400 hover:text-white"
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -323,13 +361,16 @@ export const GamesView: React.FC<GamesViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">Court Name</label>
-                  <input
-                    type="text"
-                    required
+                  <select
                     value={courtName}
                     onChange={(e) => setCourtName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-lime-400"
-                  />
+                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-sky-400 text-xs"
+                  >
+                    <option value="Court 1 - Pink Glass Arena (Indoor)">Court 1 - Pink Glass Arena (Indoor)</option>
+                    <option value="Court 2 - Sunset Court (Indoor)">Court 2 - Sunset Court (Indoor)</option>
+                    <option value="Court 3 - Electric Blue Skyline (Outdoor)">Court 3 - Electric Blue Skyline (Outdoor)</option>
+                    <option value="Court 4 - Center Court Pro (Indoor)">Court 4 - Center Court Pro (Indoor)</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">Location / Club</label>
@@ -338,7 +379,7 @@ export const GamesView: React.FC<GamesViewProps> = ({
                     required
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-lime-400"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-sky-400 text-xs"
                   />
                 </div>
               </div>
@@ -349,7 +390,7 @@ export const GamesView: React.FC<GamesViewProps> = ({
                     type="checkbox"
                     checked={isIndoor}
                     onChange={(e) => setIsIndoor(e.target.checked)}
-                    className="w-4 h-4 rounded text-lime-400 bg-slate-800 border-slate-700 focus:ring-lime-400"
+                    className="w-4 h-4 rounded text-sky-500 bg-slate-800 border-slate-700 focus:ring-sky-500"
                   />
                   <span>Indoor Court (Glass & Roof)</span>
                 </label>
@@ -363,7 +404,7 @@ export const GamesView: React.FC<GamesViewProps> = ({
                     required
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-lime-400"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-sky-400"
                   />
                 </div>
                 <div>
@@ -373,7 +414,7 @@ export const GamesView: React.FC<GamesViewProps> = ({
                     required
                     value={time}
                     onChange={(e) => setTime(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-lime-400"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-sky-400"
                   />
                 </div>
               </div>
@@ -384,69 +425,72 @@ export const GamesView: React.FC<GamesViewProps> = ({
                   <select
                     value={format}
                     onChange={(e) => setFormat(e.target.value as GameFormat)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-lime-400"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-sky-400 text-xs"
                   >
-                    <option value="League Ranked Match">League Ranked Match</option>
-                    <option value="Casual 4-Player">Casual 4-Player</option>
-                    <option value="Americano">Americano Tournament</option>
+                    <option value="Casual 4-Player">Casual 4-Player (Mixin)</option>
+                    <option value="League Ranked Match">Winter Padel Slay League</option>
+                    <option value="Americano">Americano Rotations</option>
                     <option value="Competitive Open">Competitive Open</option>
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Target Skill Level</label>
-                  <input
-                    type="text"
-                    value={targetLevel}
-                    onChange={(e) => setTargetLevel(e.target.value)}
-                    placeholder="e.g. 3.0 - 4.2"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-lime-400"
-                  />
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Duration</label>
+                  <select
+                    value={durationMinutes}
+                    onChange={(e) => setDurationMinutes(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-sky-400 text-xs"
+                  >
+                    <option value={60}>60 Minutes</option>
+                    <option value={90}>90 Minutes (Standard)</option>
+                    <option value={120}>120 Minutes</option>
+                  </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Duration (mins)</label>
-                  <select
-                    value={durationMinutes}
-                    onChange={(e) => setDurationMinutes(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-lime-400"
-                  >
-                    <option value={60}>60 minutes</option>
-                    <option value={90}>90 minutes (Standard)</option>
-                    <option value={120}>120 minutes</option>
-                  </select>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Target Skill Level</label>
+                  <input
+                    type="text"
+                    required
+                    value={targetLevel}
+                    onChange={(e) => setTargetLevel(e.target.value)}
+                    placeholder="e.g. 3.5 - 4.5"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-sky-400"
+                  />
                 </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">Price / Player (€)</label>
                   <input
                     type="number"
+                    required
+                    min={0}
                     value={pricePerPlayer}
                     onChange={(e) => setPricePerPlayer(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-lime-400"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-sky-400"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Host Notes</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Notes / Match Vibes</label>
                 <textarea
                   rows={2}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="e.g. Balls provided, warm up 10 mins before start..."
-                  className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-lime-400 text-xs"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-sky-400 text-xs"
                 />
               </div>
 
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  className="w-full py-3 px-4 rounded-xl bg-lime-400 text-slate-950 font-black text-xs uppercase tracking-wider hover:bg-lime-300 transition"
-                >
-                  Create & Reserve Court
-                </button>
-              </div>
+              <button
+                type="submit"
+                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-xs uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-lg shadow-sky-500/25 mt-2"
+              >
+                <CheckCircle2 className="w-4 h-4 font-bold" />
+                <span>Publish Game & Open Slots</span>
+              </button>
             </form>
           </div>
         </div>

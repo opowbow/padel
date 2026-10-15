@@ -7,6 +7,9 @@ import {
   RecordedMatch,
   WeeklyAward,
   LeagueStanding,
+  InterestedMember,
+  SignUpOption,
+  MemberStatus,
 } from '../types/padel';
 import {
   INITIAL_PLAYERS,
@@ -14,18 +17,21 @@ import {
   INITIAL_LEAGUES,
   INITIAL_RECORDED_MATCHES,
   INITIAL_WEEKLY_AWARDS,
+  INITIAL_MEMBERS,
 } from '../utils/initialData';
 import { calculateMatchScoring } from '../utils/scoringEngine';
 
 const STORAGE_KEYS = {
-  PLAYERS: 'padel_players_v1',
-  GAMES: 'padel_games_v1',
-  LEAGUES: 'padel_leagues_v1',
-  MATCHES: 'padel_matches_v1',
-  WEEKLY_AWARDS: 'padel_weekly_v1',
-  CURRENT_PLAYER_ID: 'padel_current_user_v1',
-  VIEW_MODE: 'padel_view_mode_v1',
-  WEIGHTED_SCORING: 'padel_weighted_scoring_v1',
+  PLAYERS: 'playslay_players_v2',
+  GAMES: 'playslay_games_v2',
+  LEAGUES: 'playslay_leagues_v2',
+  MATCHES: 'playslay_matches_v2',
+  WEEKLY_AWARDS: 'playslay_weekly_v2',
+  MEMBERS: 'playslay_members_v2',
+  CURRENT_PLAYER_ID: 'playslay_current_user_v2',
+  VIEW_MODE: 'playslay_view_mode_v2',
+  WEIGHTED_SCORING: 'playslay_weighted_scoring_v2',
+  SIGNUP_PLANS: 'padelslay_signup_plans_v1',
 };
 
 export function usePadelState() {
@@ -54,22 +60,48 @@ export function usePadelState() {
     return saved ? JSON.parse(saved) : INITIAL_WEEKLY_AWARDS;
   });
 
+  const [members, setMembers] = useState<InterestedMember[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.MEMBERS);
+    return saved ? JSON.parse(saved) : INITIAL_MEMBERS;
+  });
+
   const [currentPlayerId, setCurrentPlayerId] = useState<string>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.CURRENT_PLAYER_ID);
     return saved || INITIAL_PLAYERS[0].id;
   });
 
-  const [viewMode, setViewMode] = useState<'web' | 'mobile'>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.VIEW_MODE);
-    return (saved as 'web' | 'mobile') || 'web';
-  });
+  const [viewMode, setViewMode] = useState<'web' | 'mobile'>('web');
 
   const [weightedScoringEnabled, setWeightedScoringEnabled] = useState<boolean>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.WEIGHTED_SCORING);
     return saved !== null ? JSON.parse(saved) : true;
   });
 
+  const [userSignUpPlans, setUserSignUpPlans] = useState<{ [playerId: string]: SignUpOption }>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.SIGNUP_PLANS);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // ignore
+      }
+    }
+    return {
+      'p-franny': 'both',
+      'p-olive': 'both',
+      'p-anna': 'both',
+      'p-annika': 'both',
+      'p-mateo': 'mixin',
+      'p-sofia': 'league',
+      'p-lucas': 'casual',
+      'p-elena': 'both',
+    };
+  });
+
   // Persist states
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SIGNUP_PLANS, JSON.stringify(userSignUpPlans));
+  }, [userSignUpPlans]);
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.PLAYERS, JSON.stringify(players));
   }, [players]);
@@ -91,12 +123,12 @@ export function usePadelState() {
   }, [weeklyAwards]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CURRENT_PLAYER_ID, currentPlayerId);
-  }, [currentPlayerId]);
+    localStorage.setItem(STORAGE_KEYS.MEMBERS, JSON.stringify(members));
+  }, [members]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.VIEW_MODE, viewMode);
-  }, [viewMode]);
+    localStorage.setItem(STORAGE_KEYS.CURRENT_PLAYER_ID, currentPlayerId);
+  }, [currentPlayerId]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.WEIGHTED_SCORING, JSON.stringify(weightedScoringEnabled));
@@ -112,7 +144,7 @@ export function usePadelState() {
       matchesPlayed: 0,
       matchesWon: 0,
       currentStreak: 0,
-      weeklyPointsGained: 25, // Welcome bonus points
+      weeklyPointsGained: 25,
       weeklyRankDelta: 0.0,
       joinedDate: new Date().toISOString().split('T')[0],
     };
@@ -120,12 +152,27 @@ export function usePadelState() {
     setPlayers((prev) => [newPlayer, ...prev]);
     setCurrentPlayerId(newPlayer.id);
 
+    // Also auto-add to interested members list
+    const newMember: InterestedMember = {
+      id: `mem-${Date.now()}`,
+      name: newPlayer.name,
+      email: newPlayer.email,
+      avatar: newPlayer.avatar,
+      rankingText: newPlayer.rankingText,
+      rankingScore: newPlayer.rankingScore,
+      status: 'Active League Player',
+      preferredDays: 'Evenings & Weekends',
+      notes: newPlayer.bio || 'New member joined through PadelSlay sign-up',
+      joinedDate: new Date().toISOString().split('T')[0],
+    };
+    setMembers((prev) => [newMember, ...prev]);
+
     try {
       confetti({
-        particleCount: 80,
-        spread: 70,
+        particleCount: 90,
+        spread: 80,
         origin: { y: 0.6 },
-        colors: ['#ccff00', '#00f2fe', '#4facfe', '#ffffff'],
+        colors: ['#ff2d78', '#ff7a00', '#38bdf8', '#ff3b30'],
       });
     } catch {
       // ignore
@@ -134,7 +181,31 @@ export function usePadelState() {
     return newPlayer;
   };
 
-  // Action: Update player profile / ranking
+  // Action: Add interested member (Express Interest)
+  const addInterestedMember = (memberData: Omit<InterestedMember, 'id' | 'joinedDate'>) => {
+    const newMember: InterestedMember = {
+      ...memberData,
+      id: `mem-${Date.now()}`,
+      joinedDate: new Date().toISOString().split('T')[0],
+    };
+
+    setMembers((prev) => [newMember, ...prev]);
+
+    try {
+      confetti({
+        particleCount: 90,
+        spread: 75,
+        origin: { y: 0.55 },
+        colors: ['#ff2d78', '#ff7a00', '#38bdf8'],
+      });
+    } catch {
+      // ignore
+    }
+
+    return newMember;
+  };
+
+  // Action: Update player profile
   const updatePlayer = (updated: Player) => {
     setPlayers((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   };
@@ -159,10 +230,10 @@ export function usePadelState() {
 
     try {
       confetti({
-        particleCount: 50,
-        spread: 60,
-        origin: { y: 0.7 },
-        colors: ['#ccff00', '#38bdf8'],
+        particleCount: 60,
+        spread: 70,
+        origin: { y: 0.65 },
+        colors: ['#ff2d78', '#38bdf8', '#ff7a00'],
       });
     } catch {
       // ignore
@@ -216,10 +287,83 @@ export function usePadelState() {
 
     try {
       confetti({
-        particleCount: 70,
+        particleCount: 80,
         spread: 80,
         origin: { y: 0.6 },
-        colors: ['#ccff00', '#f59e0b', '#38bdf8'],
+        colors: ['#ff2d78', '#ff7a00', '#38bdf8'],
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  // Action: Choose Sign-Up Option (Mixin, League, Both, Casual)
+  const selectSignUpOption = (
+    option: SignUpOption,
+    playerId: string = currentPlayerId,
+    notes?: string
+  ) => {
+    setUserSignUpPlans((prev) => ({ ...prev, [playerId]: option }));
+
+    const targetPlayer = players.find((p) => p.id === playerId) || currentPlayer;
+
+    let memberStatus: MemberStatus = 'Looking for Mixin Group';
+    if (option === 'league' || option === 'both') {
+      memberStatus = 'Active League Player';
+      registerForLeague('league-winter-slay', playerId);
+    } else if (option === 'casual') {
+      memberStatus = 'Weekend Social';
+    } else if (option === 'mixin') {
+      memberStatus = 'Looking for Mixin Group';
+    }
+
+    setMembers((prev) => {
+      const existingIndex = prev.findIndex(
+        (m) => m.name.toLowerCase() === targetPlayer.name.toLowerCase() || m.id === targetPlayer.id
+      );
+
+      const optionLabels: Record<SignUpOption, string> = {
+        mixin: 'Sign up for mixin',
+        league: 'Sign up for League',
+        both: 'Sign up for both',
+        casual: 'Sign up as casual member',
+      };
+
+      const finalNote = notes
+        ? `${notes} • [${optionLabels[option]}]`
+        : `Registered: ${optionLabels[option]}`;
+
+      if (existingIndex >= 0) {
+        const copy = [...prev];
+        copy[existingIndex] = {
+          ...copy[existingIndex],
+          status: memberStatus,
+          notes: finalNote,
+        };
+        return copy;
+      } else {
+        const newMember: InterestedMember = {
+          id: `mem-${Date.now()}`,
+          name: targetPlayer.name,
+          email: targetPlayer.email,
+          avatar: targetPlayer.avatar,
+          rankingText: targetPlayer.rankingText,
+          rankingScore: targetPlayer.rankingScore,
+          status: memberStatus,
+          preferredDays: 'Evenings & Weekends',
+          notes: finalNote,
+          joinedDate: new Date().toISOString().split('T')[0],
+        };
+        return [newMember, ...prev];
+      }
+    });
+
+    try {
+      confetti({
+        particleCount: 110,
+        spread: 85,
+        origin: { y: 0.55 },
+        colors: ['#38bdf8', '#06b6d4', '#ff2d78', '#ff7a00'],
       });
     } catch {
       // ignore
@@ -290,7 +434,6 @@ export function usePadelState() {
         const isWinner = (isTeamA && params.winnerTeam === 'A') || (isTeamB && params.winnerTeam === 'B');
         const pointsAwarded = isTeamA ? breakdown.totalTeamAPoints : breakdown.totalTeamBPoints;
 
-        // Small rating increment on win
         const rankGain = isWinner ? 0.05 : -0.02;
         const newScore = Math.max(1.0, Math.min(7.0, parseFloat((player.rankingScore + rankGain).toFixed(2))));
 
@@ -306,7 +449,6 @@ export function usePadelState() {
       })
     );
 
-    // If linked to an open game, mark it completed
     if (params.gameId) {
       setGames((prev) =>
         prev.map((g) => (g.id === params.gameId ? { ...g, status: 'completed' } : g))
@@ -318,7 +460,7 @@ export function usePadelState() {
         particleCount: 100,
         spread: 90,
         origin: { y: 0.5 },
-        colors: ['#ccff00', '#10b981', '#38bdf8', '#f59e0b'],
+        colors: ['#ff2d78', '#ff7a00', '#38bdf8', '#ff3b30'],
       });
     } catch {
       // ignore
@@ -332,10 +474,8 @@ export function usePadelState() {
     const league = leagues.find((l) => l.id === leagueId);
     if (!league) return [];
 
-    // Filter matches for this league
     const leagueMatches = matches.filter((m) => m.leagueId === leagueId);
 
-    // Initial stats for all registered players
     const standingsMap = new Map<string, {
       player: Player;
       played: number;
@@ -348,7 +488,6 @@ export function usePadelState() {
       streak: number;
     }>();
 
-    // Ensure all registered players are represented
     league.registeredPlayerIds.forEach((pid) => {
       const p = players.find((pl) => pl.id === pid);
       if (p) {
@@ -366,14 +505,12 @@ export function usePadelState() {
       }
     });
 
-    // Process all league matches (oldest to newest for form)
     const sortedMatches = [...leagueMatches].reverse();
 
     sortedMatches.forEach((m) => {
       const teamAPlayerIds = [m.teamA.player1.id, m.teamA.player2.id];
       const teamBPlayerIds = [m.teamB.player1.id, m.teamB.player2.id];
 
-      // Team A
       teamAPlayerIds.forEach((pid) => {
         let entry = standingsMap.get(pid);
         if (!entry) {
@@ -398,7 +535,6 @@ export function usePadelState() {
         }
       });
 
-      // Team B
       teamBPlayerIds.forEach((pid) => {
         let entry = standingsMap.get(pid);
         if (!entry) {
@@ -424,7 +560,6 @@ export function usePadelState() {
       });
     });
 
-    // Convert to sorted array
     const result: LeagueStanding[] = Array.from(standingsMap.values()).map((val) => ({
       playerId: val.player.id,
       player: val.player,
@@ -435,36 +570,25 @@ export function usePadelState() {
       pointsLost: val.pointsLost,
       pointDiff: val.pointsWon - val.pointsLost,
       leaguePoints: val.leaguePoints,
-      form: val.form.slice(-5), // Last 5 matches
+      form: val.form.slice(-5),
       streak: val.streak,
       rank: 1,
     }));
 
-    // Sort by league points desc, then point diff desc, then points won desc
+    // Ensure the top 4 are ranked in proper order if specified
     result.sort((a, b) => {
       if (b.leaguePoints !== a.leaguePoints) return b.leaguePoints - a.leaguePoints;
       if (b.pointDiff !== a.pointDiff) return b.pointDiff - a.pointDiff;
       return b.pointsWon - a.pointsWon;
     });
 
-    // Assign rank numbers
     return result.map((item, index) => ({
       ...item,
       rank: index + 1,
     }));
   };
 
-  // Get current "Most Improved Player" dynamically based on weekly delta & point surge
-  const getMostImprovedPlayer = (): {
-    player: Player;
-    pointsGained: number;
-    rankDelta: number;
-    winRate: number;
-    streak: number;
-    commentary: string;
-    runnerUps: { player: Player; pointsGained: number; rankDelta: number }[];
-  } => {
-    // Sort players by weeklyPointsGained * 0.6 + weeklyRankDelta * 200
+  const getMostImprovedPlayer = () => {
     const sorted = [...players].sort((a, b) => {
       const scoreA = a.weeklyPointsGained * 0.7 + a.weeklyRankDelta * 150;
       const scoreB = b.weeklyPointsGained * 0.7 + b.weeklyRankDelta * 150;
@@ -480,7 +604,7 @@ export function usePadelState() {
       rankDelta: top.weeklyRankDelta,
       winRate,
       streak: top.currentStreak,
-      commentary: `${top.name} is on fire this week, leading all players with +${top.weeklyPointsGained} points gained and a stellar +${top.weeklyRankDelta} rating elevation!`,
+      commentary: `${top.name} is dominating PadelSlay this week with +${top.weeklyPointsGained} points gained and a stellar +${top.weeklyRankDelta} rating elevation!`,
       runnerUps: sorted.slice(1, 4).map((p) => ({
         player: p,
         pointsGained: p.weeklyPointsGained,
@@ -489,7 +613,6 @@ export function usePadelState() {
     };
   };
 
-  // Reset to initial mock data
   const resetToDefaults = () => {
     localStorage.clear();
     setPlayers(INITIAL_PLAYERS);
@@ -497,7 +620,18 @@ export function usePadelState() {
     setLeagues(INITIAL_LEAGUES);
     setMatches(INITIAL_RECORDED_MATCHES);
     setWeeklyAwards(INITIAL_WEEKLY_AWARDS);
+    setMembers(INITIAL_MEMBERS);
     setCurrentPlayerId(INITIAL_PLAYERS[0].id);
+    setUserSignUpPlans({
+      'p-franny': 'both',
+      'p-olive': 'both',
+      'p-anna': 'both',
+      'p-annika': 'both',
+      'p-mateo': 'mixin',
+      'p-sofia': 'league',
+      'p-lucas': 'casual',
+      'p-elena': 'both',
+    });
     setViewMode('web');
     setWeightedScoringEnabled(true);
   };
@@ -508,14 +642,18 @@ export function usePadelState() {
     leagues,
     matches,
     weeklyAwards,
+    members,
     currentPlayer,
     currentPlayerId,
     setCurrentPlayerId,
+    userSignUpPlans,
+    selectSignUpOption,
     viewMode,
     setViewMode,
     weightedScoringEnabled,
     setWeightedScoringEnabled,
     registerPlayer,
+    addInterestedMember,
     updatePlayer,
     joinGameSlot,
     leaveGameSlot,
