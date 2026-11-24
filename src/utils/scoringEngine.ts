@@ -7,7 +7,7 @@ export interface CalculateMatchPointsParams {
   teamBPlayer2: Player;
   teamAPointsWon: number;
   teamBPointsWon: number;
-  winnerTeam: 'A' | 'B';
+  winnerTeam: 'A' | 'B' | 'Tie';
   useWeighting: boolean;
 }
 
@@ -23,15 +23,9 @@ export function calculateMatchScoring(params: CalculateMatchPointsParams): Score
     useWeighting,
   } = params;
 
-  // Base points
-  const baseWin = 20;
-  const baseLoss = 6; // Participation baseline
-
-  // Net point/game difference bonus
   const teamAPointDiff = teamAPointsWon - teamBPointsWon;
   const teamBPointDiff = teamBPointsWon - teamAPointsWon;
 
-  // Rating averages
   const teamAAvgRank = (teamAPlayer1.rankingScore + teamAPlayer2.rankingScore) / 2;
   const teamBAvgRank = (teamBPlayer1.rankingScore + teamBPlayer2.rankingScore) / 2;
 
@@ -43,59 +37,62 @@ export function calculateMatchScoring(params: CalculateMatchPointsParams): Score
   const formulaExplanation: string[] = [];
 
   if (winnerTeam === 'A') {
-    formulaExplanation.push(`🏆 Team A Victory: +${baseWin} Base Win Points`);
-    formulaExplanation.push(`🎾 Team B Participation: +${baseLoss} Base Points`);
+    formulaExplanation.push(
+      `🏆 Team 1 Win (${teamAPointsWon}-${teamBPointsWon}): +${teamAPointsWon} pts to Team 1, +${teamBPointsWon} pts to Team 2`
+    );
+  } else if (winnerTeam === 'B') {
+    formulaExplanation.push(
+      `🏆 Team 2 Win (${teamBPointsWon}-${teamAPointsWon}): +${teamBPointsWon} pts to Team 2, +${teamAPointsWon} pts to Team 1`
+    );
   } else {
-    formulaExplanation.push(`🏆 Team B Victory: +${baseWin} Base Win Points`);
-    formulaExplanation.push(`🎾 Team A Participation: +${baseLoss} Base Points`);
+    formulaExplanation.push(
+      `🤝 Timed Draw (${teamAPointsWon}-${teamBPointsWon}): +${teamAPointsWon} pts each`
+    );
   }
 
-  // Games/Points won and lost contribution
-  const teamAGamesBonus = Math.max(0, Math.round(teamAPointsWon * 0.5));
-  const teamBGamesBonus = Math.max(0, Math.round(teamBPointsWon * 0.5));
-  formulaExplanation.push(`📊 Game Score Bonus: Team A (+${teamAGamesBonus} pts for ${teamAPointsWon} won), Team B (+${teamBGamesBonus} pts for ${teamBPointsWon} won)`);
-
-  if (useWeighting) {
-    // 1. Opponent Rank Differential (Beating higher ranked team)
+  if (useWeighting && winnerTeam !== 'Tie') {
     if (winnerTeam === 'A' && teamBAvgRank > teamAAvgRank) {
       const diff = teamBAvgRank - teamAAvgRank;
-      teamAOpponentBonus = Math.round(diff * 10);
-      formulaExplanation.push(`⚡ Team A Giant-Killer Bonus: +${teamAOpponentBonus} pts (Beating opponents rated +${diff.toFixed(2)} higher)`);
+      teamAOpponentBonus = Math.round(diff * 4);
+      if (teamAOpponentBonus > 0) {
+        formulaExplanation.push(
+          `⚡ Team 1 Upset Bonus: +${teamAOpponentBonus} pts (vs +${diff.toFixed(2)} higher avg rating)`
+        );
+      }
     } else if (winnerTeam === 'B' && teamAAvgRank > teamBAvgRank) {
       const diff = teamAAvgRank - teamBAvgRank;
-      teamBOpponentBonus = Math.round(diff * 10);
-      formulaExplanation.push(`⚡ Team B Giant-Killer Bonus: +${teamBOpponentBonus} pts (Beating opponents rated +${diff.toFixed(2)} higher)`);
+      teamBOpponentBonus = Math.round(diff * 4);
+      if (teamBOpponentBonus > 0) {
+        formulaExplanation.push(
+          `⚡ Team 2 Upset Bonus: +${teamBOpponentBonus} pts (vs +${diff.toFixed(2)} higher avg rating)`
+        );
+      }
     }
 
-    // 2. Weaker Partner Weighting (Carrying a lower-ranked partner against high-ranked opposition)
     const teamARankDiff = Math.abs(teamAPlayer1.rankingScore - teamAPlayer2.rankingScore);
     const teamBRankDiff = Math.abs(teamBPlayer1.rankingScore - teamBPlayer2.rankingScore);
 
     if (winnerTeam === 'A' && teamARankDiff >= 0.5) {
-      teamAPartnerCarryBonus = Math.round(teamARankDiff * 6);
-      formulaExplanation.push(`🤝 Team A Partner Handicap Bonus: +${teamAPartnerCarryBonus} pts (Level difference between partners: ${teamARankDiff.toFixed(1)})`);
+      teamAPartnerCarryBonus = Math.round(teamARankDiff * 3);
+      if (teamAPartnerCarryBonus > 0) {
+        formulaExplanation.push(`🤝 Team 1 Partner Carry Bonus: +${teamAPartnerCarryBonus} pts`);
+      }
     }
 
     if (winnerTeam === 'B' && teamBRankDiff >= 0.5) {
-      teamBPartnerCarryBonus = Math.round(teamBRankDiff * 6);
-      formulaExplanation.push(`🤝 Team B Partner Handicap Bonus: +${teamBPartnerCarryBonus} pts (Level difference between partners: ${teamBRankDiff.toFixed(1)})`);
+      teamBPartnerCarryBonus = Math.round(teamBRankDiff * 3);
+      if (teamBPartnerCarryBonus > 0) {
+        formulaExplanation.push(`🤝 Team 2 Partner Carry Bonus: +${teamBPartnerCarryBonus} pts`);
+      }
     }
   }
 
-  let totalTeamAPoints = 0;
-  let totalTeamBPoints = 0;
-
-  if (winnerTeam === 'A') {
-    totalTeamAPoints = baseWin + Math.max(0, teamAPointDiff) + teamAOpponentBonus + teamAPartnerCarryBonus;
-    totalTeamBPoints = baseLoss + Math.max(1, teamBGamesBonus);
-  } else {
-    totalTeamBPoints = baseWin + Math.max(0, teamBPointDiff) + teamBOpponentBonus + teamBPartnerCarryBonus;
-    totalTeamAPoints = baseLoss + Math.max(1, teamAGamesBonus);
-  }
+  const totalTeamAPoints = teamAPointsWon + teamAOpponentBonus + teamAPartnerCarryBonus;
+  const totalTeamBPoints = teamBPointsWon + teamBOpponentBonus + teamBPartnerCarryBonus;
 
   return {
-    basePoints: winnerTeam === 'A' ? baseWin : baseLoss,
-    pointDiffBonus: winnerTeam === 'A' ? teamAPointDiff : teamBPointDiff,
+    basePoints: winnerTeam === 'A' ? teamAPointsWon : teamBPointsWon,
+    pointDiffBonus: winnerTeam === 'Tie' ? 0 : winnerTeam === 'A' ? teamAPointDiff : teamBPointDiff,
     opponentWeightBonus: winnerTeam === 'A' ? teamAOpponentBonus : teamBOpponentBonus,
     partnerHandicapBonus: winnerTeam === 'A' ? teamAPartnerCarryBonus : teamBPartnerCarryBonus,
     totalTeamAPoints,
@@ -104,9 +101,6 @@ export function calculateMatchScoring(params: CalculateMatchPointsParams): Score
   };
 }
 
-/**
- * Parses set score strings like ["6-4", "3-6", "7-5"] into total games/points won and lost
- */
 export function parseSetScores(sets: string[]): {
   teamAPoints: number;
   teamBPoints: number;

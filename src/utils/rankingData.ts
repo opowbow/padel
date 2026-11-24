@@ -61,7 +61,7 @@ export const RANKING_PRESETS: RankingPreset[] = [
     label: 'Level 5.0+ - Slay Elite Pro',
     tag: 'Elite Slay',
     badgeColor: 'bg-fuchsia-950 text-fuchsia-400 border-fuchsia-500/30',
-    description: 'Championship circuit / PadelSlay tour player with devastating overhead power and speed.',
+    description: 'Championship circuit / TuesSlay tour player with devastating overhead power and speed.',
   },
 ];
 

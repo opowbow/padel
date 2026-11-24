@@ -1,24 +1,14 @@
 import React, { useState } from 'react';
-import { X, Sparkles, UserCheck, ShieldCheck } from 'lucide-react';
+import { X, Sparkles, UserCheck } from 'lucide-react';
 import { Player, PlaySide, DominantHand } from '../types/padel';
 import { RANKING_PRESETS, parseRankingScore, getRankingBadge } from '../utils/rankingData';
+import { PlayerAvatar } from './PlayerAvatar';
 
 interface PlayerSignUpModalProps {
   isOpen: boolean;
   onClose: () => void;
   onRegister: (playerData: Omit<Player, 'id' | 'matchesPlayed' | 'matchesWon' | 'currentStreak' | 'weeklyPointsGained' | 'weeklyRankDelta' | 'joinedDate'>) => void;
 }
-
-const AVATAR_OPTIONS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=250&q=80',
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=250&q=80',
-  'https://images.unsplash.com/photo-1534751516642-a171ed28723c?auto=format&fit=crop&w=250&q=80',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=250&q=80',
-  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=250&q=80',
-  'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=250&q=80',
-  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=250&q=80',
-];
 
 export const PlayerSignUpModal: React.FC<PlayerSignUpModalProps> = ({
   isOpen,
@@ -27,7 +17,6 @@ export const PlayerSignUpModal: React.FC<PlayerSignUpModalProps> = ({
 }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_OPTIONS[0]);
   const [rankingMode, setRankingMode] = useState<'preset' | 'manual'>('preset');
   const [selectedPresetIndex, setSelectedPresetIndex] = useState(3); // Level 3.0
   const [manualRankingText, setManualRankingText] = useState('Level 3.7 - Intermediate Plus');
@@ -49,7 +38,7 @@ export const PlayerSignUpModal: React.FC<PlayerSignUpModalProps> = ({
     onRegister({
       name: name.trim(),
       email: email.trim() || `${name.toLowerCase().replace(/\s+/g, '.')}@playslay.io`,
-      avatar: selectedAvatar,
+      avatar: '',
       rankingText: activeRankingText,
       rankingScore: activeRankingScore,
       rankingType: rankingMode,
@@ -72,7 +61,7 @@ export const PlayerSignUpModal: React.FC<PlayerSignUpModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-black text-white uppercase tracking-tight">
-                Join PadelSlay
+                Join TuesSlay
               </h3>
               <p className="text-xs text-slate-400">
                 Register player profile & set your skill ranking
@@ -90,26 +79,15 @@ export const PlayerSignUpModal: React.FC<PlayerSignUpModalProps> = ({
 
         {/* Modal Form */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-sm flex-1">
-          {/* Avatar Selection */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2">
-              Select Your Avatar
-            </label>
-            <div className="flex items-center gap-2 overflow-x-auto pb-2">
-              {AVATAR_OPTIONS.map((av, idx) => (
-                <img
-                  key={idx}
-                  src={av}
-                  alt="avatar"
-                  onClick={() => setSelectedAvatar(av)}
-                  className={`w-12 h-12 rounded-xl object-cover cursor-pointer transition ${
-                    selectedAvatar === av
-                      ? 'ring-3 ring-pink-500 scale-105'
-                      : 'opacity-60 hover:opacity-100 ring-1 ring-slate-700'
-                  }`}
-                />
-              ))}
-            </div>
+          {/* Initial Badge Preview */}
+          <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-950/60 border border-slate-800">
+            <PlayerAvatar
+              name={name.trim() || 'P'}
+              className="w-12 h-12 rounded-2xl text-lg"
+            />
+            <span className="text-xs text-slate-400">
+              Profile badge uses the first letter of the player's name
+            </span>
           </div>
 
           {/* Name & Email */}

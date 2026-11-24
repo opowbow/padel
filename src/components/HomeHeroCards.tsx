@@ -9,6 +9,7 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { PadelGame, LeagueStanding } from '../types/padel';
+import { PlayerAvatar } from './PlayerAvatar';
 
 interface HomeHeroCardsProps {
   onNavigateToGames: (filterType?: 'all' | 'mixin' | 'league') => void;
@@ -27,7 +28,7 @@ export const HomeHeroCards: React.FC<HomeHeroCardsProps> = ({
   topStandings,
   activeGames,
 }) => {
-  const top4 = topStandings.slice(0, 4);
+  const top3 = topStandings.slice(0, 3);
 
   // Filter games for Mixin and League
   const openSpotsCount = activeGames.reduce((acc, g) => {
@@ -38,14 +39,14 @@ export const HomeHeroCards: React.FC<HomeHeroCardsProps> = ({
   return (
     <div className="space-y-6">
       {/* Two Main Cards: Mixin Magic & Winter Padel Slay League */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
+      <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-5 sm:gap-6">
         {/* Card 1: Mixin Magic */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-sky-950/70 via-slate-900 to-indigo-950/40 border-2 border-sky-500/40 p-4 sm:p-7 shadow-2xl flex flex-col justify-between group hover:border-sky-400 transition-all">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-sky-950/70 via-slate-900 to-indigo-950/40 border-2 border-sky-500/40 p-4 @xl:p-7 shadow-2xl flex flex-col justify-between group hover:border-sky-400 transition-all">
           <div className="absolute top-0 right-0 -mt-12 -mr-12 w-64 h-64 bg-sky-500/15 rounded-full blur-3xl pointer-events-none group-hover:bg-sky-500/25 transition"></div>
           <div className="absolute bottom-0 left-0 -mb-12 -ml-12 w-64 h-64 bg-blue-500/15 rounded-full blur-3xl pointer-events-none"></div>
 
           <div className="relative z-10 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-sky-400" />
                 Social & Rotation Sessions
@@ -56,37 +57,47 @@ export const HomeHeroCards: React.FC<HomeHeroCardsProps> = ({
             </div>
 
             <div>
-              <h2 className="text-2xl sm:text-4xl font-black text-white uppercase tracking-tight flex items-center gap-2">
+              <h2 className="text-2xl @xl:text-4xl font-black text-white uppercase tracking-tight flex items-center gap-2">
                 <span>Mixin Magic</span>
                 <span className="text-xl">✨</span>
               </h2>
-              <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-md leading-relaxed">
-                Jump into fast-paced 4-player social games, partner rotations, and Americanos. Meet fellow PadelSlay members on court!
+              <p className="text-xs @xl:text-sm text-slate-300 mt-1 max-w-md leading-relaxed">
+                Jump into fast-paced 4-player social games, partner rotations, and Americanos. Host or join open court sessions!
               </p>
             </div>
 
-            {/* Quick Court Preview for Mixin */}
+            {/* Live Court Preview for Mixin (zero sample sessions) */}
             <div className="space-y-2 pt-2">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Featured Mixin Courts Today:
+                Open Mixin Sessions:
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between">
-                  <div className="truncate">
-                    <span className="font-bold text-sky-400 block truncate">Court 2 - Sunset Court</span>
-                    <span className="text-[10px] text-slate-400">19:00 • 2 Spots Open</span>
-                  </div>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              {activeGames.length > 0 ? (
+                <div className="grid grid-cols-1 @xl:grid-cols-2 gap-2 text-xs">
+                  {activeGames.slice(0, 2).map((g) => {
+                    const spotsLeft = 4 - Object.values(g.players).filter(Boolean).length;
+                    return (
+                      <div
+                        key={g.id}
+                        className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between"
+                      >
+                        <div className="truncate">
+                          <span className="font-bold text-sky-400 block truncate">
+                            {g.courtName}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {g.time} • {spotsLeft} Spot{spotsLeft === 1 ? '' : 's'} Open
+                          </span>
+                        </div>
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                      </div>
+                    );
+                  })}
                 </div>
-
-                <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between">
-                  <div className="truncate">
-                    <span className="font-bold text-blue-400 block truncate">Court 4 - Center Court</span>
-                    <span className="text-[10px] text-slate-400">17:30 • Americano</span>
-                  </div>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              ) : (
+                <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-xs text-slate-400">
+                  No open court bookings scheduled yet — click below to host a session.
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -136,13 +147,13 @@ export const HomeHeroCards: React.FC<HomeHeroCardsProps> = ({
               </p>
             </div>
 
-            {/* Top 4 Players Showcase */}
+            {/* Top 3 Players Showcase */}
             <div className="space-y-2 pt-2">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Top 4 Ranked Slay Titans:
+                Top 3 League Rankings:
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                {top4.map((standing, idx) => (
+              <div className="grid grid-cols-1 @xl:grid-cols-3 gap-2 text-xs">
+                {top3.map((standing, idx) => (
                   <div
                     key={standing.playerId}
                     className="p-2 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center gap-2.5"
@@ -160,10 +171,9 @@ export const HomeHeroCards: React.FC<HomeHeroCardsProps> = ({
                     >
                       {idx + 1}
                     </div>
-                    <img
-                      src={standing.player.avatar}
-                      alt={standing.player.name}
-                      className="w-7 h-7 rounded-lg object-cover ring-1 ring-slate-700 shrink-0"
+                    <PlayerAvatar
+                      name={standing.player.name}
+                      className="w-7 h-7 rounded-lg text-xs ring-1 ring-slate-700"
                     />
                     <div className="truncate flex-1">
                       <span className="font-bold text-white block text-[11px] truncate">
@@ -216,7 +226,7 @@ export const HomeHeroCards: React.FC<HomeHeroCardsProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="grid grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-4 gap-3.5">
           {[
             {
               courtNum: 'Court 1',

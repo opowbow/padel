@@ -9,9 +9,12 @@ import {
   Info,
   Flame,
   Users,
+  Cloud,
 } from 'lucide-react';
 import { Player } from '../types/padel';
+import { CloudSyncStatus } from '../hooks/usePadelState';
 import { getRankingBadge } from '../utils/rankingData';
+import { PlayerAvatar } from './PlayerAvatar';
 
 interface HeaderProps {
   currentPlayer: Player;
@@ -19,8 +22,10 @@ interface HeaderProps {
   onSelectPlayer: (id: string) => void;
   onOpenSignUp: () => void;
   onOpenMembers?: () => void;
+  onGoHome?: () => void;
   viewMode: 'web' | 'mobile';
   onToggleViewMode: (mode: 'web' | 'mobile') => void;
+  cloudSyncStatus?: CloudSyncStatus;
   weightedScoring: boolean;
   onToggleWeightedScoring: () => void;
   onResetData: () => void;
@@ -32,8 +37,10 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectPlayer,
   onOpenSignUp,
   onOpenMembers,
+  onGoHome,
   viewMode,
   onToggleViewMode,
+  cloudSyncStatus = 'synced',
   weightedScoring,
   onToggleWeightedScoring,
   onResetData,
@@ -44,39 +51,62 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
-        {/* Brand Logo & Name */}
-        <div className="flex items-center space-x-3">
-          <div className="relative">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-400 via-blue-600 to-pink-500 flex items-center justify-center shadow-lg shadow-sky-500/25 transform hover:rotate-6 transition-transform">
-              <Flame className="w-6 h-6 text-white fill-white" />
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2 sm:gap-4">
+        {/* Brand Logo & Name (Clickable Home -> League Table) */}
+        <button
+          type="button"
+          onClick={onGoHome}
+          title="Back to League Table (Home)"
+          className="flex items-center space-x-2.5 sm:space-x-3 min-w-0 text-left cursor-pointer group"
+        >
+          <div className="relative shrink-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-sky-400 via-blue-600 to-pink-500 flex items-center justify-center shadow-lg shadow-sky-500/25 transform group-hover:rotate-6 transition-transform">
+              <Flame className="w-5 h-5 sm:w-6 sm:h-6 text-white fill-white" />
             </div>
-            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-sky-500"></span>
             </span>
           </div>
 
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-xl font-black tracking-tight text-white uppercase italic">
-                Padel<span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 via-blue-400 to-pink-500">Slay</span>
+              <span className="text-lg sm:text-xl font-black tracking-tight text-white italic group-hover:text-sky-200 transition-colors">
+                Tues<span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 via-blue-400 to-pink-500">Slay</span>
               </span>
-              <span className="text-[10px] uppercase font-black px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 border border-sky-500/30">
-                Padel App
+              <span
+                title="All names, scores, dates, and fixtures sync automatically to Google Cloud Storage (op-hack-001/slaypadel)"
+                className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                  cloudSyncStatus === 'saving' || cloudSyncStatus === 'loading'
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                    : cloudSyncStatus === 'offline'
+                    ? 'bg-slate-800 text-slate-400 border-slate-700'
+                    : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                }`}
+              >
+                <Cloud className="w-2.5 h-2.5 shrink-0" />
+                <span className="hidden xs:inline sm:inline">
+                  {cloudSyncStatus === 'saving'
+                    ? 'Saving...'
+                    : cloudSyncStatus === 'loading'
+                    ? 'Syncing...'
+                    : cloudSyncStatus === 'offline'
+                    ? 'Local'
+                    : 'Saved'}
+                </span>
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 font-medium hidden sm:block">
-              Mixin Magic & Winter Padel Slay League
+            <p className="text-[11px] text-slate-400 font-medium hidden md:block">
+              TuesSlay Padel League & Mixin Magic
             </p>
           </div>
-        </div>
+        </button>
 
         {/* View Mode Toggle: Web vs Mobile */}
         <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-2xl border border-slate-800">
           <button
             onClick={() => onToggleViewMode('web')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
               viewMode === 'web'
                 ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/25'
                 : 'text-slate-400 hover:text-white'
@@ -88,19 +118,19 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => onToggleViewMode('mobile')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
               viewMode === 'mobile'
                 ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/25'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
             <Smartphone className="w-3.5 h-3.5" />
-            <span>Mobile App</span>
+            <span className="hidden xs:inline sm:inline">Mobile</span>
           </button>
         </div>
 
         {/* Right Section: Member list button, Weighted wins toggle, & Player profile switcher */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Join Member List button */}
           {onOpenMembers && (
             <button
@@ -165,10 +195,9 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setShowUserDropdown(!showUserDropdown)}
               className="flex items-center gap-2 p-1.5 pr-3 rounded-2xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition"
             >
-              <img
-                src={currentPlayer.avatar}
-                alt={currentPlayer.name}
-                className="w-8 h-8 rounded-xl object-cover ring-2 ring-sky-400/50"
+              <PlayerAvatar
+                name={currentPlayer.name}
+                className="w-8 h-8 rounded-xl text-xs ring-2 ring-sky-400/50"
               />
               <div className="text-left hidden sm:block">
                 <div className="text-xs font-bold text-white flex items-center gap-1 leading-tight">
@@ -208,10 +237,9 @@ export const Header: React.FC<HeaderProps> = ({
                             : 'hover:bg-slate-800'
                         }`}
                       >
-                        <img
-                          src={p.avatar}
-                          alt={p.name}
-                          className="w-7 h-7 rounded-lg object-cover"
+                        <PlayerAvatar
+                          name={p.name}
+                          className="w-7 h-7 rounded-lg text-xs"
                         />
                         <div className="min-w-0 flex-1">
                           <p className={`text-xs font-bold truncate ${isSelected ? 'text-pink-400' : 'text-slate-200'}`}>

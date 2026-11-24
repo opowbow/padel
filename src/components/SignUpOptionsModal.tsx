@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Player, SignUpOption, SIGN_UP_OPTIONS } from '../types/padel';
 import { getRankingBadge } from '../utils/rankingData';
+import { PlayerAvatar } from './PlayerAvatar';
 
 interface SignUpOptionsModalProps {
   isOpen: boolean;
@@ -80,10 +81,10 @@ export const SignUpOptionsModal: React.FC<SignUpOptionsModalProps> = ({
                 <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">
                   Player Registration
                 </span>
-                <span className="text-[10px] font-bold text-slate-400">PadelSlay</span>
+                <span className="text-[10px] font-bold text-slate-400">TuesSlay</span>
               </div>
               <h3 className="text-xl sm:text-2xl font-black text-white uppercase tracking-tight mt-0.5">
-                Sign Up for PadelSlay
+                Sign Up for TuesSlay
               </h3>
             </div>
           </div>
@@ -99,10 +100,9 @@ export const SignUpOptionsModal: React.FC<SignUpOptionsModalProps> = ({
         {/* Player Identity Bar */}
         <div className="px-4 sm:px-6 py-2.5 bg-slate-950/60 border-b border-slate-800/80 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2.5">
-            <img
-              src={currentPlayer.avatar}
-              alt={currentPlayer.name}
-              className="w-8 h-8 rounded-full object-cover ring-2 ring-sky-400/50"
+            <PlayerAvatar
+              name={currentPlayer.name}
+              className="w-8 h-8 rounded-full text-xs ring-2 ring-sky-400/50"
             />
             <div>
               <span className="text-slate-400">Signing up as: </span>

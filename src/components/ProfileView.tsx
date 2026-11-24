@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Player, PlaySide, DominantHand } from '../types/padel';
 import { RANKING_PRESETS, parseRankingScore, getRankingBadge } from '../utils/rankingData';
+import { PlayerAvatar } from './PlayerAvatar';
 
 interface ProfileViewProps {
   currentPlayer: Player;
@@ -20,6 +21,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onUpdatePlayer,
   onOpenSignUp,
 }) => {
+  const [playerName, setPlayerName] = useState(currentPlayer.name);
   const [rankingMode, setRankingMode] = useState<'preset' | 'manual'>(currentPlayer.rankingType);
   const [selectedPresetIndex, setSelectedPresetIndex] = useState(() => {
     const idx = RANKING_PRESETS.findIndex((p) => p.level === currentPlayer.rankingScore);
@@ -41,6 +43,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
     onUpdatePlayer({
       ...currentPlayer,
+      name: playerName.trim() || currentPlayer.name,
       rankingText: activeRankingText,
       rankingScore: activeRankingScore,
       rankingType: rankingMode,
@@ -62,10 +65,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       {/* Profile Overview Card */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-sky-950/30 to-slate-900 border border-slate-800 p-4 sm:p-8 shadow-2xl">
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6 relative z-10">
-          <img
-            src={currentPlayer.avatar}
-            alt={currentPlayer.name}
-            className="w-22 h-22 sm:w-28 sm:h-28 rounded-2xl object-cover ring-4 ring-sky-500/50 shadow-xl"
+          <PlayerAvatar
+            name={playerName.trim() || currentPlayer.name}
+            className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl text-3xl sm:text-4xl ring-4 ring-sky-500/50 shadow-xl"
           />
 
           <div className="flex-1 text-center sm:text-left space-y-2">
@@ -165,6 +167,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
 
         <form onSubmit={handleSave} className="space-y-4 text-sm">
+          {/* Editable Player Name */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">
+              Player Name / Nickname
+            </label>
+            <input
+              type="text"
+              required
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-bold focus:outline-none focus:border-sky-400 text-xs"
+            />
+          </div>
+
           {/* Ranking Mode Toggle */}
           <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/80 space-y-4">
             <div className="flex items-center justify-between">

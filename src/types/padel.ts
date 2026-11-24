@@ -66,8 +66,11 @@ export interface ScoreBreakdown {
 export interface RecordedMatch {
   id: string;
   gameId?: string;
+  sessionId?: string;
   leagueId: string;
   date: string;
+  round?: string;
+  timeSlot?: string;
   courtName: string;
   teamA: {
     player1: Player;
@@ -81,10 +84,49 @@ export interface RecordedMatch {
     setsWon: number;
     pointsWon: number;
   };
-  setScores: string[]; // e.g. ["6-4", "3-6", "7-5"]
-  winnerTeam: 'A' | 'B';
+  setScores: string[]; // e.g. ["6-2"] or ["6-4", "3-6", "7-5"]
+  winnerTeam: 'A' | 'B' | 'Tie';
   weightedBonusApplied: boolean;
   scoringBreakdown: ScoreBreakdown;
+}
+
+export interface ScheduledFixture {
+  id: string;
+  sessionId: string;
+  leagueId: string;
+  date: string;
+  roundNumber: number;
+  roundLabel: string; // e.g. "Round 1"
+  timeSlot: string; // e.g. "18:00–18:20"
+  durationMinutes: number; // e.g. 20
+  courtName: string; // e.g. "Court 1"
+  teamA: {
+    player1: Player;
+    player2: Player;
+  };
+  teamB: {
+    player1: Player;
+    player2: Player;
+  };
+  teamAScore?: number;
+  teamBScore?: number;
+  completed?: boolean;
+  recordedMatchId?: string;
+  previousPartnerCountA?: number;
+  previousPartnerCountB?: number;
+}
+
+export interface NextGameSession {
+  id: string;
+  leagueId: string;
+  date: string;
+  startTime: string;
+  durationPerRoundMinutes: number;
+  roundsCount: number;
+  selectedPlayerIds: string[];
+  restingByRound: { [roundNumber: number]: Player[] };
+  fixtures: ScheduledFixture[];
+  createdAt: string;
 }
 
 export interface LeagueStanding {
@@ -93,11 +135,12 @@ export interface LeagueStanding {
   played: number;
   won: number;
   lost: number;
+  drawn: number;
   pointsWon: number; // Total games/points won across matches
   pointsLost: number; // Total games/points lost
   pointDiff: number;
   leaguePoints: number; // Total league ranking points
-  form: ('W' | 'L')[]; // Last 5 results
+  form: ('W' | 'L' | 'D')[]; // Last 5 results
   streak: number;
   rank: number;
 }
@@ -200,7 +243,7 @@ export const SIGN_UP_OPTIONS: SignUpOptionConfig[] = [
     label: 'Sign up as casual member',
     badge: 'Community Roster',
     tagline: 'Weekend Social & Standby',
-    description: 'Join the PadelSlay community directory for weekend drop-ins, socials, last-minute replacement spots, and club updates.',
+    description: 'Join the TuesSlay community directory for weekend drop-ins, socials, last-minute replacement spots, and club updates.',
     gradient: 'from-slate-800 via-slate-850 to-slate-900',
     borderActive: 'border-slate-400 ring-2 ring-slate-400/40',
     memberStatus: 'Weekend Social',

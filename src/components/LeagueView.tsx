@@ -1,18 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Trophy,
-  Medal,
-  Award,
   Sparkles,
-  UserPlus,
-  CheckCircle,
+  Users,
   TrendingUp,
   Flame,
   ChevronDown,
   ChevronUp,
+  History,
+  CalendarClock,
+  Calendar,
+  Shuffle,
+  Mic,
+  Pencil,
+  Check,
+  X,
+  ArrowLeft,
+  FileSpreadsheet,
 } from 'lucide-react';
-import { League, LeagueStanding, RecordedMatch, Player, SignUpOption } from '../types/padel';
-import { getRankingBadge } from '../utils/rankingData';
+import {
+  League,
+  LeagueStanding,
+  RecordedMatch,
+  Player,
+  NextGameSession,
+} from '../types/padel';
+import { LeagueGamesPanel } from './LeagueGamesPanel';
+import { getShortPlayerName } from '../utils/teamGenerator';
+import { PlayerAvatar } from './PlayerAvatar';
 
 interface LeagueViewProps {
   leagues: League[];
@@ -21,12 +36,52 @@ interface LeagueViewProps {
   standings: LeagueStanding[];
   matches: RecordedMatch[];
   currentPlayer: Player;
-  onRegisterForLeague: (leagueId: string, playerId: string) => void;
+  nextGameSession: NextGameSession | null;
   onOpenRecordScore: (leagueId: string) => void;
+  onOpenCreateGameSession: () => void;
+  onOpenImportNextGames?: () => void;
+  onOpenManagePlayers: () => void;
+  onRenamePlayer: (playerId: string, newName: string) => void;
+  onUpdateFixtureDraftScore: (
+    fixtureId: string,
+    teamAScore: number | undefined,
+    teamBScore: number | undefined
+  ) => void;
+  onUpdateNextSessionDate: (newDate: string) => void;
+  onRecordSingleFixture: (
+    fixtureId: string,
+    overrideScores?: { teamAScore: number; teamBScore: number }
+  ) => void;
+  onRecordAllScoredFixtures: () => number;
+  onUpdateRecordedSessionDate: (sessionKey: string, newDate: string) => void;
   weightedScoring: boolean;
-  onOpenSignUpOptions?: () => void;
-  currentPlan?: SignUpOption;
+  activeGamesPanel?: 'last' | 'next' | null;
+  onChangeGamesPanel?: (panel: 'last' | 'next' | null) => void;
 }
+
+const FormPills: React.FC<{ form: ('W' | 'L' | 'D')[] }> = ({ form }) => {
+  if (form.length === 0) {
+    return <span className="text-[10px] font-mono text-slate-500">–</span>;
+  }
+  return (
+    <div className="inline-flex items-center gap-1" title="Rolling form for last set of games">
+      {form.map((res, i) => (
+        <span
+          key={i}
+          className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black font-mono shrink-0 ${
+            res === 'W'
+              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+              : res === 'L'
+              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+              : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+          }`}
+        >
+          {res}
+        </span>
+      ))}
+    </div>
+  );
+};
 
 export const LeagueView: React.FC<LeagueViewProps> = ({
   leagues,
@@ -35,36 +90,120 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
   standings,
   matches,
   currentPlayer,
-  onRegisterForLeague,
+  nextGameSession,
   onOpenRecordScore,
+  onOpenCreateGameSession,
+  onOpenImportNextGames,
+  onOpenManagePlayers,
+  onRenamePlayer,
+  onUpdateFixtureDraftScore,
+  onUpdateNextSessionDate,
+  onRecordSingleFixture,
+  onRecordAllScoredFixtures,
+  onUpdateRecordedSessionDate,
   weightedScoring,
-  onOpenSignUpOptions,
-  currentPlan,
+  activeGamesPanel: controlledGamesPanel,
+  onChangeGamesPanel,
 }) => {
+  const [expandedDateKeys, setExpandedDateKeys] = useState<Record<string, boolean>>({});
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
-  const activeLeague = leagues.find((l) => l.id === activeLeagueId) || leagues[0];
-  const isCurrentPlayerRegistered = activeLeague?.registeredPlayerIds.includes(currentPlayer.id);
+  const [internalGamesPanel, setInternalGamesPanel] = useState<'last' | 'next' | null>(null);
+  const activeGamesPanel =
+    controlledGamesPanel !== undefined ? controlledGamesPanel : internalGamesPanel;
+  const setGamesPanel = (next: 'last' | 'next' | null) => {
+    if (onChangeGamesPanel) {
+      onChangeGamesPanel(next);
+    } else {
+      setInternalGamesPanel(next);
+    }
+  };
+  const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState<string>('');
 
-  // Filter matches for current league
+  const activeLeague = leagues.find((l) => l.id === activeLeagueId) || leagues[0];
   const leagueMatches = matches.filter((m) => m.leagueId === activeLeague?.id);
 
-  // Top 4 Ranked Titans
+  // Group recorded matches by date / session so each date is an expandable link
+  const dateGroups = useMemo(() => {
+    const map = new Map<
+      string,
+      { key: string; date: string; matches: RecordedMatch[] }
+    >();
+
+    for (const m of leagueMatches) {
+      const key = m.date ? `date:${m.date}` : m.sessionId || 'session-spreadsheet-1';
+      const existing = map.get(key);
+      if (existing) {
+        existing.matches.push(m);
+      } else {
+        map.set(key, { key, date: m.date || '', matches: [m] });
+      }
+    }
+
+    const list = Array.from(map.values()).reverse();
+    list.sort((a, b) => {
+      if (a.date && b.date && a.date !== b.date) return b.date.localeCompare(a.date);
+      return 0;
+    });
+    return list;
+  }, [leagueMatches]);
+
+  const toggleDateGroup = (key: string) => {
+    setExpandedDateKeys((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const formatDateLinkLabel = (dateStr: string, groupMatches: RecordedMatch[]): string => {
+    if (dateStr) {
+      const parsed = new Date(`${dateStr}T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toLocaleDateString('en-GB', {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        });
+      }
+      return dateStr;
+    }
+    const firstSlot = groupMatches[0]?.timeSlot?.split('–')[0] || '';
+    const lastSlot =
+      groupMatches[groupMatches.length - 1]?.timeSlot?.split('–')[1] || '';
+    const timeRange = firstSlot && lastSlot ? ` (${firstSlot}–${lastSlot})` : '';
+    return `Session Results${timeRange} — Add / View Date`;
+  };
+
+  // Top 3 Rankings Podium
   const top1 = standings[0];
   const top2 = standings[1];
   const top3 = standings[2];
-  const top4 = standings[3];
+
+  const openFixturesCount = nextGameSession
+    ? nextGameSession.fixtures.filter((f) => !f.completed).length
+    : 0;
+
+  const startEditName = (player: Player) => {
+    setEditingPlayerId(player.id);
+    setEditingName(player.name);
+  };
+
+  const commitEditName = (playerId: string) => {
+    if (editingName.trim()) {
+      onRenamePlayer(playerId, editingName.trim());
+    }
+    setEditingPlayerId(null);
+    setEditingName('');
+  };
 
   return (
-    <div className="space-y-6">
-      {/* League Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-sky-950/40 to-slate-900 border border-slate-800 p-4 sm:p-6 shadow-2xl">
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-72 h-72 bg-sky-500/15 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 -mb-10 w-72 h-72 bg-orange-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5 relative z-10">
-          <div>
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              {/* League Selector Dropdown */}
+    <div className="space-y-4 @xl:space-y-5">
+      {/* Top Quick-Action Bar: Last Games | Next Games | Create Game | Players | Voice/Easy Score */}
+      <div className="p-3 @xl:p-4 rounded-3xl bg-gradient-to-r from-slate-900 via-sky-950/50 to-slate-900 border border-slate-800 shadow-2xl space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            {leagues.length > 1 ? (
               <select
                 value={activeLeagueId}
                 onChange={(e) => onSelectLeague(e.target.value)}
@@ -76,171 +215,248 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
                   </option>
                 ))}
               </select>
-
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
-                {activeLeague?.season}
+            ) : (
+              <span className="px-2.5 py-1 rounded-xl bg-slate-800/90 border border-slate-700 text-xs font-black text-white truncate">
+                🏆 {activeLeague?.name}
               </span>
+            )}
 
-              {weightedScoring && (
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/15 text-orange-400 border border-orange-500/30 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" />
-                  Weighted Wins Enabled
-                </span>
-              )}
-            </div>
+            <span className="text-[11px] text-slate-400 font-mono hidden @xl:inline">
+              👥 {standings.length} Players • 🎾 {leagueMatches.length} Matches
+            </span>
 
-            <h2 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight">
-              {activeLeague?.name}
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-2xl mt-1 leading-relaxed">
-              {activeLeague?.description}
-            </p>
-
-            <div className="mt-3 flex flex-wrap items-center gap-3.5 text-xs text-slate-400">
-              <span>👥 {activeLeague?.registeredPlayerIds.length} Slay Players</span>
-              <span>•</span>
-              <span>🎾 {leagueMatches.length} Recorded Matches</span>
-              <span>•</span>
-              <span>📅 Season ends: {activeLeague?.activeUntil}</span>
-            </div>
+            {weightedScoring && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/15 text-orange-400 border border-orange-500/30 flex items-center gap-1">
+                <Sparkles className="w-3 h-3" />
+                Weighted
+              </span>
+            )}
           </div>
 
-          {/* Quick League Actions */}
-          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-            <button
-              onClick={onOpenSignUpOptions}
-              className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-sky-500/25 hover:scale-105 active:scale-95 transition-all w-full sm:w-auto"
-            >
-              <UserPlus className="w-4 h-4 font-bold" />
-              <span>{isCurrentPlayerRegistered ? 'Sign Up / Change Plan' : 'Sign Up'}</span>
-            </button>
+          <div className="flex items-center gap-1.5 @xl:gap-2">
+            {activeGamesPanel && (
+              <button
+                type="button"
+                onClick={() => setGamesPanel(null)}
+                className="px-2.5 @xl:px-3 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-400/50 text-[11px] @xl:text-xs font-black flex items-center gap-1 transition cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+                <span>League Table</span>
+              </button>
+            )}
 
-            {isCurrentPlayerRegistered && (
-              <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold text-xs shadow-md">
-                <CheckCircle className="w-4 h-4 text-emerald-400" />
-                <span>You are in this League!</span>
-              </div>
+            {onOpenImportNextGames && (
+              <button
+                type="button"
+                onClick={onOpenImportNextGames}
+                title="Upload CSV or Google Sheet for Next Games"
+                className="px-2.5 @xl:px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] @xl:text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Import CSV / Sheet</span>
+              </button>
             )}
 
             <button
-              onClick={() => onOpenRecordScore(activeLeague.id)}
-              className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-800 hover:bg-slate-750 text-white font-bold text-xs uppercase tracking-wider border border-slate-700 shadow-md transition-all w-full sm:w-auto"
+              type="button"
+              onClick={onOpenManagePlayers}
+              className="px-2.5 @xl:px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] @xl:text-xs font-bold flex items-center gap-1 transition"
             >
-              <Trophy className="w-4 h-4 text-orange-400" />
-              <span>+ Record Match Score</span>
+              <Users className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span>Players</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onOpenRecordScore(activeLeague.id)}
+              className="px-2.5 @xl:px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-500/40 text-[11px] @xl:text-xs font-bold flex items-center gap-1 transition"
+            >
+              <Mic className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span>+ Score</span>
             </button>
           </div>
         </div>
+
+        {/* Primary Top 3 Action Buttons: Last Games, Next Games, Create Game */}
+        <div className="grid grid-cols-3 gap-1.5 @xl:gap-3">
+          <button
+            type="button"
+            onClick={() => setGamesPanel(activeGamesPanel === 'last' ? null : 'last')}
+            className={`py-2 @xl:py-2.5 px-1.5 @xl:px-4 rounded-2xl font-black text-[10px] @xl:text-xs uppercase tracking-wide flex flex-col @lg:flex-row items-center justify-center gap-1 @lg:gap-1.5 transition border min-w-0 ${
+              activeGamesPanel === 'last'
+                ? 'bg-sky-500 text-slate-950 border-sky-300 shadow-lg shadow-sky-500/25'
+                : 'bg-slate-950/80 hover:bg-slate-800 text-sky-300 border-sky-500/40'
+            }`}
+          >
+            <History className="w-3.5 h-3.5 @xl:w-4 @xl:h-4 shrink-0" />
+            <span className="truncate">Last Games</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setGamesPanel(activeGamesPanel === 'next' ? null : 'next')}
+            className={`py-2 @xl:py-2.5 px-1.5 @xl:px-4 rounded-2xl font-black text-[10px] @xl:text-xs uppercase tracking-wide flex flex-col @lg:flex-row items-center justify-center gap-1 @lg:gap-1.5 transition border min-w-0 ${
+              activeGamesPanel === 'next'
+                ? 'bg-orange-500 text-slate-950 border-orange-300 shadow-lg shadow-orange-500/25'
+                : 'bg-slate-950/80 hover:bg-slate-800 text-orange-300 border-orange-500/40'
+            }`}
+          >
+            <div className="flex items-center gap-1">
+              <CalendarClock className="w-3.5 h-3.5 @xl:w-4 @xl:h-4 shrink-0" />
+              {openFixturesCount > 0 && (
+                <span
+                  className={`px-1 rounded-full text-[9px] font-mono ${
+                    activeGamesPanel === 'next'
+                      ? 'bg-slate-950 text-orange-300'
+                      : 'bg-orange-500/20 text-orange-300'
+                  }`}
+                >
+                  {openFixturesCount}
+                </span>
+              )}
+            </div>
+            <span className="truncate">Next Games</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenCreateGameSession}
+            className="py-2 @xl:py-2.5 px-1.5 @xl:px-4 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:from-pink-400 hover:to-orange-400 text-white font-black text-[10px] @xl:text-xs uppercase tracking-wide flex flex-col @lg:flex-row items-center justify-center gap-1 @lg:gap-1.5 shadow-lg shadow-pink-500/25 transition min-w-0"
+          >
+            <Shuffle className="w-3.5 h-3.5 @xl:w-4 @xl:h-4 shrink-0" />
+            <span className="truncate">Create Game</span>
+          </button>
+        </div>
       </div>
 
-      {/* Top 4 Titans Showcase Podium */}
+      {/* Expandable Panel when Last Games or Next Games is clicked */}
+      {activeGamesPanel ? (
+        <LeagueGamesPanel
+          mode={activeGamesPanel}
+          onClose={() => {
+            setGamesPanel(null);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          matches={leagueMatches}
+          nextGameSession={nextGameSession}
+          onOpenCreateGame={() => {
+            onOpenCreateGameSession();
+            setGamesPanel('next');
+          }}
+          onOpenImportNextGames={onOpenImportNextGames}
+          onUpdateFixtureDraftScore={onUpdateFixtureDraftScore}
+          onUpdateNextSessionDate={onUpdateNextSessionDate}
+          onRecordSingleFixture={onRecordSingleFixture}
+          onRecordAllScoredFixtures={onRecordAllScoredFixtures}
+          onUpdateRecordedSessionDate={onUpdateRecordedSessionDate}
+        />
+      ) : (
+        <>
+
+      {/* TOP 3 RANKINGS PODIUM */}
       <div className="space-y-2.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-black uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5" />
-            Top 4 Ranked Slay Leaders
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+            <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Top 3 Rankings</span>
           </span>
           <span className="text-[11px] text-slate-400 font-mono">
-            Winter Championship Leaders
+            {leagueMatches.length} Matches
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* #1 Franny */}
+        <div className="grid grid-cols-1 @2xl:grid-cols-3 gap-2.5 @xl:gap-3">
+          {/* #1 Leader */}
           {top1 && (
-            <div className="p-4 rounded-3xl bg-gradient-to-b from-amber-500/20 via-slate-900 to-slate-900 border-2 border-amber-400/50 flex items-center gap-3 relative overflow-hidden shadow-lg shadow-amber-500/10">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 flex items-center justify-center text-slate-950 font-black text-sm shadow shrink-0">
+            <div className="p-3.5 @xl:p-4 rounded-3xl bg-gradient-to-b from-amber-500/25 via-slate-900 to-slate-900 border-2 border-amber-400/60 flex items-center gap-3 relative overflow-hidden shadow-xl shadow-amber-500/10">
+              <div className="w-9 h-9 @xl:w-10 @xl:h-10 rounded-2xl bg-gradient-to-br from-amber-300 to-yellow-500 flex items-center justify-center text-slate-950 font-black text-base shadow shrink-0">
                 1
               </div>
-              <img
-                src={top1.player.avatar}
-                alt={top1.player.name}
-                className="w-11 h-11 rounded-xl object-cover ring-2 ring-amber-400 shadow-sm shrink-0"
+              <PlayerAvatar
+                name={top1.player.name}
+                className="w-11 h-11 @xl:w-12 @xl:h-12 rounded-2xl text-base ring-2 ring-amber-400"
               />
-              <div className="min-w-0 flex-1">
-                <span className="text-[9px] font-black text-amber-400 uppercase tracking-wider block">
-                  👑 RANK #1 LEADER
-                </span>
-                <p className="text-xs font-black text-white truncate">{top1.player.name}</p>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-300 font-mono">
-                  <span className="text-amber-300 font-bold">{top1.leaguePoints} pts</span>
-                  <span>•</span>
-                  <span className="text-emerald-400">+{top1.pointDiff} diff</span>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="text-[9px] font-black text-amber-400 uppercase tracking-wider block">
+                      👑 #1 LEADER
+                    </span>
+                    <p className="text-sm font-black text-white truncate">{top1.player.name}</p>
+                  </div>
+                  <span className="text-base font-mono font-black text-amber-300 shrink-0">
+                    {top1.leaguePoints} pts
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-slate-300 font-mono">
+                  <span>
+                    {top1.won}W-{top1.lost}L ({top1.pointDiff >= 0 ? `+${top1.pointDiff}` : top1.pointDiff})
+                  </span>
+                  <FormPills form={top1.form} />
                 </div>
               </div>
             </div>
           )}
 
-          {/* #2 Olive */}
+          {/* #2 Runner-Up */}
           {top2 && (
-            <div className="p-4 rounded-3xl bg-slate-900/90 border border-slate-700/80 flex items-center gap-3 relative overflow-hidden">
-              <div className="w-9 h-9 rounded-xl bg-slate-700 text-slate-200 flex items-center justify-center font-black text-sm shadow shrink-0">
+            <div className="p-3.5 @xl:p-4 rounded-3xl bg-gradient-to-b from-slate-700/25 via-slate-900 to-slate-900 border border-slate-400/40 flex items-center gap-3 relative overflow-hidden shadow-lg">
+              <div className="w-9 h-9 @xl:w-10 @xl:h-10 rounded-2xl bg-slate-300 text-slate-950 flex items-center justify-center font-black text-base shadow shrink-0">
                 2
               </div>
-              <img
-                src={top2.player.avatar}
-                alt={top2.player.name}
-                className="w-11 h-11 rounded-xl object-cover ring-2 ring-slate-400 shrink-0"
+              <PlayerAvatar
+                name={top2.player.name}
+                className="w-11 h-11 @xl:w-12 @xl:h-12 rounded-2xl text-base ring-2 ring-slate-300"
               />
-              <div className="min-w-0 flex-1">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
-                  🥈 RANK #2 TITAN
-                </span>
-                <p className="text-xs font-bold text-white truncate">{top2.player.name}</p>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-300 font-mono">
-                  <span className="text-sky-300 font-bold">{top2.leaguePoints} pts</span>
-                  <span>•</span>
-                  <span>{top2.won}W - {top2.lost}L</span>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-wider block">
+                      🥈 #2 RANKED
+                    </span>
+                    <p className="text-sm font-black text-white truncate">{top2.player.name}</p>
+                  </div>
+                  <span className="text-base font-mono font-black text-sky-300 shrink-0">
+                    {top2.leaguePoints} pts
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-slate-300 font-mono">
+                  <span>
+                    {top2.won}W-{top2.lost}L ({top2.pointDiff >= 0 ? `+${top2.pointDiff}` : top2.pointDiff})
+                  </span>
+                  <FormPills form={top2.form} />
                 </div>
               </div>
             </div>
           )}
 
-          {/* #3 Anna */}
+          {/* #3 Third Place */}
           {top3 && (
-            <div className="p-4 rounded-3xl bg-slate-900/90 border border-slate-700/80 flex items-center gap-3 relative overflow-hidden">
-              <div className="w-9 h-9 rounded-xl bg-orange-950 text-orange-400 border border-orange-600/40 flex items-center justify-center font-black text-sm shadow shrink-0">
+            <div className="p-3.5 @xl:p-4 rounded-3xl bg-gradient-to-b from-orange-600/20 via-slate-900 to-slate-900 border border-orange-500/40 flex items-center gap-3 relative overflow-hidden shadow-lg">
+              <div className="w-9 h-9 @xl:w-10 @xl:h-10 rounded-2xl bg-orange-500 text-white flex items-center justify-center font-black text-base shadow shrink-0">
                 3
               </div>
-              <img
-                src={top3.player.avatar}
-                alt={top3.player.name}
-                className="w-11 h-11 rounded-xl object-cover ring-2 ring-orange-500 shrink-0"
+              <PlayerAvatar
+                name={top3.player.name}
+                className="w-11 h-11 @xl:w-12 @xl:h-12 rounded-2xl text-base ring-2 ring-orange-400"
               />
-              <div className="min-w-0 flex-1">
-                <span className="text-[9px] font-bold text-orange-400 uppercase tracking-wider block">
-                  🥉 RANK #3 SMASH
-                </span>
-                <p className="text-xs font-bold text-white truncate">{top3.player.name}</p>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-300 font-mono">
-                  <span className="text-orange-400 font-bold">{top3.leaguePoints} pts</span>
-                  <span>•</span>
-                  <span>{top3.won}W - {top3.lost}L</span>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="text-[9px] font-black text-orange-400 uppercase tracking-wider block">
+                      🥉 #3 RANKED
+                    </span>
+                    <p className="text-sm font-black text-white truncate">{top3.player.name}</p>
+                  </div>
+                  <span className="text-base font-mono font-black text-orange-300 shrink-0">
+                    {top3.leaguePoints} pts
+                  </span>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* #4 Annika */}
-          {top4 && (
-            <div className="p-4 rounded-3xl bg-slate-900/90 border border-slate-700/80 flex items-center gap-3 relative overflow-hidden">
-              <div className="w-9 h-9 rounded-xl bg-blue-950 text-sky-400 border border-blue-600/40 flex items-center justify-center font-black text-sm shadow shrink-0">
-                4
-              </div>
-              <img
-                src={top4.player.avatar}
-                alt={top4.player.name}
-                className="w-11 h-11 rounded-xl object-cover ring-2 ring-sky-500 shrink-0"
-              />
-              <div className="min-w-0 flex-1">
-                <span className="text-[9px] font-bold text-sky-400 uppercase tracking-wider block">
-                  ⚔️ RANK #4 DESTROYER
-                </span>
-                <p className="text-xs font-bold text-white truncate">{top4.player.name}</p>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-300 font-mono">
-                  <span className="text-sky-300 font-bold">{top4.leaguePoints} pts</span>
-                  <span>•</span>
-                  <span>{top4.won}W - {top4.lost}L</span>
+                <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-slate-300 font-mono">
+                  <span>
+                    {top3.won}W-{top3.lost}L ({top3.pointDiff >= 0 ? `+${top3.pointDiff}` : top3.pointDiff})
+                  </span>
+                  <FormPills form={top3.form} />
                 </div>
               </div>
             </div>
@@ -248,45 +464,176 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
         </div>
       </div>
 
-      {/* Main Leaderboard Table */}
+      {/* FULL LEAGUE STANDINGS DIRECTLY UNDERNEATH TOP 3 */}
       <div className="rounded-3xl border border-slate-800 bg-slate-900/90 backdrop-blur-md overflow-hidden shadow-2xl">
-        <div className="p-4 sm:p-5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div className="p-3.5 @xl:p-5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-sky-400" />
-              Official Standings & Leadership Board
+            <h3 className="text-xs @xl:text-base font-black text-white uppercase tracking-wider flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-sky-400 shrink-0" />
+              <span>Full League Standings ({standings.length})</span>
             </h3>
-            <p className="text-xs text-slate-400">
-              Rankings determined by total league points, points won & lost differential, and match outcomes
+            <p className="text-[11px] text-slate-400">
+              Form shows rolling results for the last set of games • Tap <Pencil className="w-3 h-3 inline text-slate-400" /> to edit any player name
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
+          <div className="hidden @xl:flex items-center gap-2 text-[11px] text-slate-400 font-mono">
             <span>PW = Points Won</span>
             <span>•</span>
             <span>PL = Points Lost</span>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Uncropped Mobile / Narrow Container Standings List */}
+        <div className="@2xl:hidden divide-y divide-slate-800/70">
+          {standings.map((row) => {
+            const isCurrent = row.playerId === currentPlayer.id;
+            const isEditing = editingPlayerId === row.playerId;
+
+            return (
+              <div
+                key={row.playerId}
+                className={`p-3 space-y-2 transition-colors ${
+                  isCurrent ? 'bg-sky-500/10' : 'hover:bg-slate-800/40'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    {row.rank === 1 ? (
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-black text-xs shrink-0">
+                        1
+                      </span>
+                    ) : row.rank === 2 ? (
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-300 text-slate-950 font-black text-xs shrink-0">
+                        2
+                      </span>
+                    ) : row.rank === 3 ? (
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-500 text-white font-black text-xs shrink-0">
+                        3
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center justify-center w-6 text-slate-400 font-mono font-bold text-xs shrink-0">
+                        #{row.rank}
+                      </span>
+                    )}
+
+                    <PlayerAvatar
+                      name={isEditing && editingName.trim() ? editingName : row.player.name}
+                      className="w-8 h-8 rounded-full text-xs"
+                    />
+
+                    {isEditing ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          commitEditName(row.playerId);
+                        }}
+                        className="flex items-center gap-1 flex-1 min-w-0"
+                      >
+                        <input
+                          type="text"
+                          autoFocus
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          className="flex-1 min-w-0 px-2 py-1 rounded-lg bg-slate-800 border border-sky-400 text-xs font-bold text-white focus:outline-none"
+                        />
+                        <button
+                          type="submit"
+                          className="p-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingPlayerId(null)}
+                          className="p-1 rounded-lg bg-slate-800 text-slate-400 shrink-0"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="min-w-0 flex items-center gap-1.5">
+                        <span className="font-bold text-xs text-white truncate">
+                          {row.player.name}
+                        </span>
+                        {isCurrent && (
+                          <span className="text-[9px] bg-sky-500/20 text-sky-400 px-1.5 py-0.2 rounded font-mono font-bold shrink-0">
+                            YOU
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => startEditName(row.player)}
+                          title={`Edit ${row.player.name}'s name`}
+                          className="p-1 rounded-md text-slate-500 hover:text-sky-300 hover:bg-slate-800 transition shrink-0"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="font-mono font-black text-sm text-sky-400">
+                      {row.leaguePoints}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 ml-0.5">pts</span>
+                  </div>
+                </div>
+
+                {/* Compact Second Line: MP, W-L, PW-PL (Diff), and Rolling Form */}
+                <div className="flex items-center justify-between gap-2 pl-8 text-[11px] font-mono">
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <span className="text-slate-400">{row.played}MP</span>
+                    <span>•</span>
+                    <span>
+                      <span className="text-emerald-400 font-bold">{row.won}W</span>
+                      <span className="text-slate-500">-</span>
+                      <span className="text-rose-400 font-bold">{row.lost}L</span>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      {row.pointsWon}-{row.pointsLost}{' '}
+                      <span
+                        className={
+                          row.pointDiff > 0
+                            ? 'text-emerald-400 font-bold'
+                            : row.pointDiff < 0
+                            ? 'text-rose-400 font-bold'
+                            : 'text-slate-400'
+                        }
+                      >
+                        ({row.pointDiff > 0 ? `+${row.pointDiff}` : row.pointDiff})
+                      </span>
+                    </span>
+                  </div>
+
+                  <FormPills form={row.form} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Full Desktop Table (Wide Containers Only) */}
+        <div className="hidden @2xl:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-800/80 uppercase text-[10px] tracking-wider text-slate-400 font-black">
               <tr>
-                <th className="py-3 px-3 sm:px-4 text-center">Rank</th>
-                <th className="py-3 px-3 sm:px-4">Player</th>
-                <th className="py-3 px-2 sm:px-3 text-center">Rating</th>
-                <th className="py-3 px-2 sm:px-3 text-center">MP</th>
-                <th className="py-3 px-2 sm:px-3 text-center">W - L</th>
-                <th className="py-3 px-2 sm:px-3 text-center">PW - PL</th>
-                <th className="py-3 px-2 sm:px-3 text-center">Diff</th>
-                <th className="py-3 px-2 sm:px-3 text-center">Form</th>
-                <th className="py-3 px-3 sm:px-4 text-right">Points</th>
+                <th className="py-3 px-4 text-center">#</th>
+                <th className="py-3 px-4">Player</th>
+                <th className="py-3 px-2 text-center">MP</th>
+                <th className="py-3 px-2 text-center">W - L</th>
+                <th className="py-3 px-2 text-center">PW - PL</th>
+                <th className="py-3 px-2 text-center">Diff</th>
+                <th className="py-3 px-2 text-center">Form (Last Set)</th>
+                <th className="py-3 px-4 text-right">Pts</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-medium text-slate-300">
               {standings.map((row) => {
                 const isCurrent = row.playerId === currentPlayer.id;
-                const badge = getRankingBadge(row.player.rankingScore, row.player.rankingText);
+                const isEditing = editingPlayerId === row.playerId;
 
                 return (
                   <tr
@@ -295,8 +642,7 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
                       isCurrent ? 'bg-sky-500/10 font-bold' : ''
                     }`}
                   >
-                    {/* Rank */}
-                    <td className="py-3 px-3 sm:px-4 text-center">
+                    <td className="py-3 px-4 text-center">
                       {row.rank === 1 ? (
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-black text-xs">
                           1
@@ -316,17 +662,47 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
                       )}
                     </td>
 
-                    {/* Player Info */}
-                    <td className="py-3 px-3 sm:px-4">
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <img
-                          src={row.player.avatar}
-                          alt={row.player.name}
-                          className="w-8 h-8 rounded-full object-cover ring-1 ring-slate-700 shrink-0"
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-3">
+                        <PlayerAvatar
+                          name={isEditing && editingName.trim() ? editingName : row.player.name}
+                          className="w-8 h-8 rounded-full text-xs"
                         />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-white truncate max-w-[140px] sm:max-w-none">
+
+                        {isEditing ? (
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              commitEditName(row.playerId);
+                            }}
+                            className="flex items-center gap-1.5"
+                          >
+                            <input
+                              type="text"
+                              autoFocus
+                              value={editingName}
+                              onChange={(e) => setEditingName(e.target.value)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-800 border border-sky-400 text-xs font-bold text-white focus:outline-none"
+                            />
+                            <button
+                              type="submit"
+                              title="Save name"
+                              className="p-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingPlayerId(null)}
+                              title="Cancel"
+                              className="p-1 rounded-lg bg-slate-800 text-slate-400"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </form>
+                        ) : (
+                          <div className="min-w-0 flex items-center gap-1.5 group">
+                            <span className="font-bold text-white truncate">
                               {row.player.name}
                             </span>
                             {isCurrent && (
@@ -334,42 +710,34 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
                                 YOU
                               </span>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => startEditName(row.player)}
+                              title={`Edit ${row.player.name}'s name`}
+                              className="p-1 rounded-md text-slate-500 hover:text-sky-300 hover:bg-slate-800 transition"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
                           </div>
-                          <span className="text-[10px] text-slate-400 block font-mono">
-                            {row.player.rankingText}
-                          </span>
-                        </div>
+                        )}
                       </div>
                     </td>
 
-                    {/* Skill Rating */}
-                    <td className="py-3 px-2 sm:px-3 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${badge.badgeColor}`}>
-                        {row.player.rankingScore.toFixed(1)}
-                      </span>
-                    </td>
+                    <td className="py-3 px-2 text-center font-mono">{row.played}</td>
 
-                    {/* Matches Played */}
-                    <td className="py-3 px-2 sm:px-3 text-center font-mono">
-                      {row.played}
-                    </td>
-
-                    {/* W - L */}
-                    <td className="py-3 px-2 sm:px-3 text-center font-mono">
+                    <td className="py-3 px-2 text-center font-mono whitespace-nowrap">
                       <span className="text-emerald-400 font-bold">{row.won}</span>
-                      <span className="text-slate-500"> / </span>
+                      <span className="text-slate-500">-</span>
                       <span className="text-rose-400 font-bold">{row.lost}</span>
                     </td>
 
-                    {/* PW - PL */}
-                    <td className="py-3 px-2 sm:px-3 text-center font-mono text-[11px]">
+                    <td className="py-3 px-2 text-center font-mono text-[11px] whitespace-nowrap">
                       <span className="text-slate-200">{row.pointsWon}</span>
-                      <span className="text-slate-500"> - </span>
+                      <span className="text-slate-500">-</span>
                       <span className="text-slate-400">{row.pointsLost}</span>
                     </td>
 
-                    {/* Point Differential */}
-                    <td className="py-3 px-2 sm:px-3 text-center font-mono font-bold">
+                    <td className="py-3 px-2 text-center font-mono font-bold">
                       <span
                         className={
                           row.pointDiff > 0
@@ -383,27 +751,14 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
                       </span>
                     </td>
 
-                    {/* Recent Form */}
-                    <td className="py-3 px-2 sm:px-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        {row.form.map((res, i) => (
-                          <span
-                            key={i}
-                            className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black font-mono ${
-                              res === 'W'
-                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                            }`}
-                          >
-                            {res}
-                          </span>
-                        ))}
+                    <td className="py-3 px-2 text-center">
+                      <div className="flex items-center justify-center">
+                        <FormPills form={row.form} />
                       </div>
                     </td>
 
-                    {/* Total League Points */}
-                    <td className="py-3 px-3 sm:px-4 text-right">
-                      <span className="font-mono font-black text-sm text-sky-400 drop-shadow">
+                    <td className="py-3 px-4 text-right">
+                      <span className="font-mono font-black text-sm text-sky-400">
                         {row.leaguePoints}
                       </span>
                     </td>
@@ -415,126 +770,210 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
         </div>
       </div>
 
-      {/* Recorded League Matches & Weighted Formulas */}
-      <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-4 sm:p-5 shadow-2xl space-y-4">
-        <div className="flex items-center justify-between">
+      {/* Recorded Match Results Grouped as Expandable Date Links */}
+      <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-3.5 @xl:p-5 shadow-2xl space-y-3">
+        <div className="flex items-center justify-between gap-2">
           <div>
-            <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center gap-2">
-              <Flame className="w-4 h-4 text-orange-400" />
-              Recent Winter League Match Results & Formulas
+            <h3 className="text-xs @xl:text-base font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+              <Flame className="w-4 h-4 text-orange-400 shrink-0" />
+              <span>Recorded Match Results ({leagueMatches.length})</span>
             </h3>
-            <p className="text-xs text-slate-400">
-              Inspect points won, points lost, and weighted scoring breakdown for each match
+            <p className="text-[11px] text-slate-400">
+              Click a date below to expand or collapse all match results from that session
             </p>
           </div>
         </div>
 
-        <div className="space-y-3">
-          {leagueMatches.map((m) => {
-            const isExpanded = expandedMatchId === m.id;
-            const teamAWon = m.winnerTeam === 'A';
+        {dateGroups.length === 0 ? (
+          <p className="text-xs text-slate-400 py-3 text-center">
+            No recorded match results yet.
+          </p>
+        ) : (
+          <div className="space-y-2.5">
+            {dateGroups.map((group) => {
+              const isDateExpanded = Boolean(expandedDateKeys[group.key]);
+              const roundsSet = new Set(
+                group.matches.map((m) => m.round).filter(Boolean)
+              );
+              const label = formatDateLinkLabel(group.date, group.matches);
 
-            return (
-              <div
-                key={m.id}
-                className="rounded-2xl border border-slate-800 bg-slate-950/60 overflow-hidden transition-all hover:border-slate-700"
-              >
-                {/* Match Summary Row */}
+              return (
                 <div
-                  onClick={() => setExpandedMatchId(isExpanded ? null : m.id)}
-                  className="p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer select-none"
+                  key={group.key}
+                  className="rounded-2xl border border-slate-800 bg-slate-950/60 overflow-hidden transition-all hover:border-slate-700"
                 >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium">
-                      <span>{m.date}</span>
-                      <span>•</span>
-                      <span className="text-sky-400 font-bold">🏟️ {m.courtName}</span>
-                      {m.weightedBonusApplied && (
-                        <>
-                          <span>•</span>
-                          <span className="text-orange-400 font-bold flex items-center gap-1">
-                            <Sparkles className="w-3 h-3" /> Weighted Win
-                          </span>
-                        </>
+                  {/* Clickable Date Link Header */}
+                  <button
+                    type="button"
+                    onClick={() => toggleDateGroup(group.key)}
+                    className="w-full p-3 @xl:p-4 flex items-center justify-between gap-2.5 text-left hover:bg-slate-900/70 transition cursor-pointer"
+                  >
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                      <Calendar className="w-4 h-4 text-sky-400 shrink-0" />
+                      <span className="text-xs @xl:text-sm font-black text-sky-400 hover:text-sky-300 underline decoration-sky-400/60 underline-offset-4 truncate">
+                        {label}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-[10px] font-mono font-bold text-slate-300 shrink-0">
+                        {group.matches.length} match{group.matches.length === 1 ? '' : 'es'}
+                        {roundsSet.size > 0 ? ` • ${roundsSet.size} rounds` : ''}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 shrink-0">
+                      <span className="hidden @xl:inline">
+                        {isDateExpanded ? 'Hide Matches' : 'Show Matches'}
+                      </span>
+                      {isDateExpanded ? (
+                        <ChevronUp className="w-4 h-4 text-sky-400" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-slate-400" />
                       )}
                     </div>
+                  </button>
 
-                    {/* Teams Display */}
-                    <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-                      {/* Team A */}
-                      <span className={teamAWon ? 'text-sky-300 font-black' : 'text-slate-300'}>
-                        {m.teamA.player1.name} & {m.teamA.player2.name}
-                      </span>
-                      <span className="text-slate-500 font-mono">
-                        ({m.teamA.pointsWon} pts won)
-                      </span>
-
-                      <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono text-[10px]">
-                        vs
-                      </span>
-
-                      {/* Team B */}
-                      <span className={!teamAWon ? 'text-blue-400 font-black' : 'text-slate-300'}>
-                        {m.teamB.player1.name} & {m.teamB.player2.name}
-                      </span>
-                      <span className="text-slate-500 font-mono">
-                        ({m.teamB.pointsWon} pts won)
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Score & Points Award */}
-                  <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end">
-                    {/* Sets Display */}
-                    <div className="flex items-center gap-1.5 font-mono text-xs font-bold bg-slate-900 px-3 py-1 rounded-xl border border-slate-800">
-                      {m.setScores.map((s, idx) => (
-                        <span key={idx} className="text-white">
-                          {s}
-                          {idx < m.setScores.length - 1 ? ', ' : ''}
+                  {/* Expanded Matches for Clicked Date */}
+                  {isDateExpanded && (
+                    <div className="p-3 @xl:p-4 pt-2 border-t border-slate-800 bg-slate-900/40 space-y-2.5 animate-in fade-in">
+                      {/* Optional Session Date Picker */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800/80 text-xs">
+                        <span className="text-[11px] text-slate-400">
+                          Tap any match below to view its scoring breakdown
                         </span>
-                      ))}
-                    </div>
-
-                    {/* Award Points */}
-                    <div className="text-right">
-                      <div className="text-xs font-black text-sky-300 font-mono">
-                        Team A: +{m.scoringBreakdown.totalTeamAPoints} pts
+                        <label className="flex items-center gap-1.5 bg-slate-950/80 px-2.5 py-1 rounded-xl border border-slate-800">
+                          <span className="text-[10px] font-bold text-slate-400">
+                            Session Date:
+                          </span>
+                          <input
+                            type="date"
+                            value={group.date}
+                            onChange={(e) => {
+                              const nextVal = e.target.value;
+                              if (!nextVal) return;
+                              onUpdateRecordedSessionDate(group.key, nextVal);
+                              setExpandedDateKeys((prev) => ({
+                                ...prev,
+                                [`date:${nextVal}`]: true,
+                              }));
+                            }}
+                            className="bg-transparent text-xs font-mono font-bold text-sky-300 focus:outline-none"
+                          />
+                        </label>
                       </div>
-                      <div className="text-xs font-black text-blue-400 font-mono">
-                        Team B: +{m.scoringBreakdown.totalTeamBPoints} pts
+
+                      <div className="space-y-2">
+                        {group.matches.map((m) => {
+                          const isExpanded = expandedMatchId === m.id;
+                          const teamAWon = m.winnerTeam === 'A';
+                          const teamBWon = m.winnerTeam === 'B';
+
+                          return (
+                            <div
+                              key={m.id}
+                              className="rounded-xl border border-slate-800 bg-slate-950/80 overflow-hidden transition-all hover:border-slate-700"
+                            >
+                              <div
+                                onClick={() =>
+                                  setExpandedMatchId(isExpanded ? null : m.id)
+                                }
+                                className="p-2.5 @xl:p-3 flex flex-col @xl:flex-row items-start @xl:items-center justify-between gap-2 cursor-pointer select-none"
+                              >
+                                <div className="space-y-1 min-w-0 w-full @xl:w-auto">
+                                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400 font-medium">
+                                    {m.round && (
+                                      <span className="text-orange-300 font-bold">
+                                        {m.round}
+                                      </span>
+                                    )}
+                                    {m.timeSlot && (
+                                      <span className="font-mono text-slate-400">
+                                        ({m.timeSlot})
+                                      </span>
+                                    )}
+                                    {(m.round || m.timeSlot) && <span>•</span>}
+                                    <span className="text-sky-400 font-bold">
+                                      🏟️ {m.courtName}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
+                                    <span
+                                      className={
+                                        teamAWon
+                                          ? 'text-emerald-300 font-black'
+                                          : 'text-slate-300'
+                                      }
+                                    >
+                                      {getShortPlayerName(m.teamA.player1)} &{' '}
+                                      {getShortPlayerName(m.teamA.player2)}
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-800 font-mono text-white">
+                                      {m.setScores.join(', ')}
+                                    </span>
+                                    <span
+                                      className={
+                                        teamBWon
+                                          ? 'text-emerald-300 font-black'
+                                          : 'text-slate-300'
+                                      }
+                                    >
+                                      {getShortPlayerName(m.teamB.player1)} &{' '}
+                                      {getShortPlayerName(m.teamB.player2)}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 w-full @xl:w-auto justify-between @xl:justify-end">
+                                  <div className="text-right font-mono text-[11px]">
+                                    <span className="text-sky-300 font-bold">
+                                      +{m.scoringBreakdown.totalTeamAPoints}p
+                                    </span>
+                                    <span className="text-slate-600 mx-1">/</span>
+                                    <span className="text-blue-400 font-bold">
+                                      +{m.scoringBreakdown.totalTeamBPoints}p
+                                    </span>
+                                  </div>
+
+                                  {isExpanded ? (
+                                    <ChevronUp className="w-4 h-4 text-slate-400" />
+                                  ) : (
+                                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                                  )}
+                                </div>
+                              </div>
+
+                              {isExpanded && (
+                                <div className="px-3 pb-3 pt-2 border-t border-slate-800 bg-slate-900/50 text-xs">
+                                  <div className="space-y-1 bg-slate-950/70 p-2.5 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-300">
+                                    {m.scoringBreakdown.formulaExplanation.map(
+                                      (line, i) => (
+                                        <div
+                                          key={i}
+                                          className="flex items-start gap-2"
+                                        >
+                                          <span className="text-slate-500 shrink-0">
+                                            ▶
+                                          </span>
+                                          <span className="break-words">{line}</span>
+                                        </div>
+                                      )
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-
-                    {isExpanded ? (
-                      <ChevronUp className="w-4 h-4 text-slate-400" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-slate-400" />
-                    )}
-                  </div>
+                  )}
                 </div>
-
-                {/* Expanded Weighted Breakdown Details */}
-                {isExpanded && (
-                  <div className="px-4 pb-4 pt-2 border-t border-slate-850 bg-slate-900/50 text-xs space-y-2">
-                    <div className="font-bold text-orange-400 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      Detailed Formula Calculation Breakdown:
-                    </div>
-                    <div className="space-y-1 bg-slate-950/70 p-3 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-300">
-                      {m.scoringBreakdown.formulaExplanation.map((line, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <span className="text-slate-500">▶</span>
-                          <span>{line}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+        </>
+      )}
     </div>
   );
 };

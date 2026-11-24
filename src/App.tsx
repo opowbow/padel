@@ -12,6 +12,9 @@ import { MobileFrame } from './components/MobileFrame';
 import { PlayerSignUpModal } from './components/PlayerSignUpModal';
 import { SignUpOptionsModal } from './components/SignUpOptionsModal';
 import { ScoreModal } from './components/ScoreModal';
+import { CreateGameSessionModal } from './components/CreateGameSessionModal';
+import { ImportNextGamesModal } from './components/ImportNextGamesModal';
+import { ManagePlayersModal } from './components/ManagePlayersModal';
 import { PadelGame, SignUpOption } from './types/padel';
 
 export function App() {
@@ -22,35 +25,70 @@ export function App() {
     matches,
     weeklyAwards,
     members,
+    nextGameSession,
     currentPlayer,
-    currentPlayerId,
     setCurrentPlayerId,
     userSignUpPlans,
     selectSignUpOption,
     viewMode,
     setViewMode,
+    cloudSyncStatus,
     weightedScoringEnabled,
     setWeightedScoringEnabled,
     registerPlayer,
+    quickAddPlayer,
+    removePlayer,
+    removeMember,
     addInterestedMember,
+    renamePlayer,
     updatePlayer,
     joinGameSlot,
     leaveGameSlot,
     createGame,
-    registerForLeague,
     recordMatchScore,
+    saveNextGameSession,
+    importNextGameSession,
+    updateFixtureDraftScore,
+    updateNextSessionDate,
+    recordSingleFixture,
+    recordAllScoredFixtures,
+    updateRecordedSessionDate,
     getLeagueStandings,
     getMostImprovedPlayer,
     resetToDefaults,
   } = usePadelState();
 
-  const [activeTab, setActiveTab] = useState<TabType>('games');
-  const [activeLeagueId, setActiveLeagueId] = useState<string>(leagues[0]?.id || 'league-winter-slay');
+  // Default both Main Web View and Mobile View to 'league' (Top 3 Rankings + Full League underneath)
+  const [activeTab, setActiveTab] = useState<TabType>('league');
+  const [leagueGamesPanel, setLeagueGamesPanel] = useState<'last' | 'next' | null>(null);
+
+  const handleSelectTab = (tab: TabType) => {
+    setActiveTab(tab);
+    setLeagueGamesPanel(null);
+  };
+
+  const handleGoHome = () => {
+    setActiveTab('league');
+    setLeagueGamesPanel(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const [activeLeagueId, setActiveLeagueId] = useState<string>(
+    leagues[0]?.id || 'league-winter-slay'
+  );
   const [isSignUpOpen, setIsSignUpOpen] = useState(false);
   const [isSignUpOptionsOpen, setIsSignUpOptionsOpen] = useState(false);
   const [signUpOptionDefault, setSignUpOptionDefault] = useState<SignUpOption>('both');
   const [isScoreModalOpen, setIsScoreModalOpen] = useState(false);
   const [selectedGameForScore, setSelectedGameForScore] = useState<PadelGame | null>(null);
+  const [isCreateSessionOpen, setIsCreateSessionOpen] = useState(false);
+  const [isImportNextGamesOpen, setIsImportNextGamesOpen] = useState(false);
+  const [importDefaultCreateBookings, setImportDefaultCreateBookings] = useState(false);
+  const [isManagePlayersOpen, setIsManagePlayersOpen] = useState(false);
+
+  const openImportModal = (createBookingsByDefault = false) => {
+    setImportDefaultCreateBookings(createBookingsByDefault);
+    setIsImportNextGamesOpen(true);
+  };
 
   const standings = getLeagueStandings(activeLeagueId);
   const mostImproved = getMostImprovedPlayer();
@@ -75,33 +113,42 @@ export function App() {
     setIsScoreModalOpen(true);
   };
 
-  // Render content matching active tab
   const renderTabContent = () => {
     switch (activeTab) {
       case 'home':
         return (
           <div className="space-y-8">
-            {/* The Two Main Cards: Mixin Magic & Winter Padel Slay League */}
             <HomeHeroCards
-              onNavigateToGames={() => setActiveTab('games')}
-              onNavigateToLeague={() => setActiveTab('league')}
-              onNavigateToMembers={() => setActiveTab('members')}
+              onNavigateToGames={() => handleSelectTab('games')}
+              onNavigateToLeague={() => handleSelectTab('league')}
+              onNavigateToMembers={() => handleSelectTab('members')}
               onOpenRecordScore={() => handleOpenRecordScore(activeLeagueId)}
               topStandings={standings}
               activeGames={games}
             />
 
-            {/* Quick Mixin Games Preview on Court */}
             <div className="pt-2">
-              <GamesView
-                games={games}
+              <LeagueView
+                leagues={leagues}
+                activeLeagueId={activeLeagueId}
+                onSelectLeague={setActiveLeagueId}
+                standings={standings}
+                matches={matches}
                 currentPlayer={currentPlayer}
-                onJoinSlot={joinGameSlot}
-                onLeaveSlot={leaveGameSlot}
-                onCreateGame={createGame}
+                nextGameSession={nextGameSession}
                 onOpenRecordScore={handleOpenRecordScore}
-                onOpenSignUpOptions={() => handleOpenSignUpOptions('mixin')}
-                currentPlan={userSignUpPlans[currentPlayer.id]}
+                onOpenCreateGameSession={() => setIsCreateSessionOpen(true)}
+                onOpenImportNextGames={() => openImportModal(false)}
+                onOpenManagePlayers={() => setIsManagePlayersOpen(true)}
+                onRenamePlayer={renamePlayer}
+                onUpdateFixtureDraftScore={updateFixtureDraftScore}
+                onUpdateNextSessionDate={updateNextSessionDate}
+                onRecordSingleFixture={recordSingleFixture}
+                onRecordAllScoredFixtures={recordAllScoredFixtures}
+                onUpdateRecordedSessionDate={updateRecordedSessionDate}
+                weightedScoring={weightedScoringEnabled}
+                activeGamesPanel={leagueGamesPanel}
+                onChangeGamesPanel={setLeagueGamesPanel}
               />
             </div>
           </div>
@@ -111,12 +158,15 @@ export function App() {
         return (
           <GamesView
             games={games}
+            players={players}
             currentPlayer={currentPlayer}
             onJoinSlot={joinGameSlot}
             onLeaveSlot={leaveGameSlot}
             onCreateGame={createGame}
             onOpenRecordScore={handleOpenRecordScore}
+            onQuickAddPlayer={(name, score) => quickAddPlayer(name, score, activeLeagueId)}
             onOpenSignUpOptions={() => handleOpenSignUpOptions('mixin')}
+            onOpenImportNextGames={() => openImportModal(true)}
             currentPlan={userSignUpPlans[currentPlayer.id]}
           />
         );
@@ -130,11 +180,20 @@ export function App() {
             standings={standings}
             matches={matches}
             currentPlayer={currentPlayer}
-            onRegisterForLeague={registerForLeague}
+            nextGameSession={nextGameSession}
             onOpenRecordScore={handleOpenRecordScore}
+            onOpenCreateGameSession={() => setIsCreateSessionOpen(true)}
+            onOpenImportNextGames={() => openImportModal(false)}
+            onOpenManagePlayers={() => setIsManagePlayersOpen(true)}
+            onRenamePlayer={renamePlayer}
+            onUpdateFixtureDraftScore={updateFixtureDraftScore}
+            onUpdateNextSessionDate={updateNextSessionDate}
+            onRecordSingleFixture={recordSingleFixture}
+            onRecordAllScoredFixtures={recordAllScoredFixtures}
+            onUpdateRecordedSessionDate={updateRecordedSessionDate}
             weightedScoring={weightedScoringEnabled}
-            onOpenSignUpOptions={() => handleOpenSignUpOptions('league')}
-            currentPlan={userSignUpPlans[currentPlayer.id]}
+            activeGamesPanel={leagueGamesPanel}
+            onChangeGamesPanel={setLeagueGamesPanel}
           />
         );
 
@@ -143,6 +202,8 @@ export function App() {
           <MembersView
             members={members}
             onAddMember={addInterestedMember}
+            onRemoveMember={removeMember}
+            onOpenManagePlayers={() => setIsManagePlayersOpen(true)}
             onOpenSignUpPlayer={() => setIsSignUpOpen(true)}
           />
         );
@@ -158,6 +219,7 @@ export function App() {
       case 'profile':
         return (
           <ProfileView
+            key={currentPlayer.id}
             currentPlayer={currentPlayer}
             onUpdatePlayer={updatePlayer}
             onOpenSignUp={() => setIsSignUpOpen(true)}
@@ -177,9 +239,11 @@ export function App() {
         players={players}
         onSelectPlayer={setCurrentPlayerId}
         onOpenSignUp={() => setIsSignUpOpen(true)}
-        onOpenMembers={() => setActiveTab('members')}
+        onOpenMembers={() => setIsManagePlayersOpen(true)}
+        onGoHome={handleGoHome}
         viewMode={viewMode}
         onToggleViewMode={setViewMode}
+        cloudSyncStatus={cloudSyncStatus}
         weightedScoring={weightedScoringEnabled}
         onToggleWeightedScoring={() => setWeightedScoringEnabled(!weightedScoringEnabled)}
         onResetData={resetToDefaults}
@@ -189,48 +253,100 @@ export function App() {
       {viewMode === 'mobile' ? (
         <MobileFrame
           activeTab={activeTab}
-          onSelectTab={setActiveTab}
+          onSelectTab={handleSelectTab}
           onSwitchToWeb={() => setViewMode('web')}
         >
           {renderTabContent()}
         </MobileFrame>
       ) : (
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
+        <main className="@container flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-6 overflow-x-hidden">
           {/* Desktop Sub Navigation Tabs */}
-          <Navigation activeTab={activeTab} onSelectTab={setActiveTab} />
+          <Navigation activeTab={activeTab} onSelectTab={handleSelectTab} />
 
           {/* Active Tab Content */}
-          <div className="animate-in fade-in duration-300">
-            {renderTabContent()}
-          </div>
+          <div className="animate-in fade-in duration-300">{renderTabContent()}</div>
         </main>
       )}
 
-      {/* Footer */}
-      <footer className="mt-auto border-t border-slate-900 bg-slate-950/80 py-6 text-center text-xs text-slate-500">
+      {/* Footer (hidden on small mobile screens when bottom tab bar is fixed) */}
+      <footer
+        className={`mt-auto border-t border-slate-900 bg-slate-950/80 py-6 text-center text-xs text-slate-500 ${
+          viewMode === 'mobile' ? 'hidden sm:block' : ''
+        }`}
+      >
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="font-black text-sky-400 tracking-wider">PadelSlay</span>
-            <span>• Padel Mixin Magic & Winter Padel Slay League</span>
+            <span className="font-black text-sky-400 tracking-wider">TuesSlay</span>
+            <span>• Winter Padel Slay League & 20-Min Smart Rotations</span>
           </div>
           <div className="flex items-center gap-4 text-slate-400">
-            <span>Designated Court Bookings</span>
+            <span>History-Smart Random Teams</span>
             <span>•</span>
-            <span>Top 4 Slay Titans Leaderboard</span>
+            <span>Top 3 Rankings & Full League</span>
             <span>•</span>
-            <span>Weighted Win Upset Bonus Engine</span>
+            <span>Voice & One-Tap Score Input</span>
           </div>
         </div>
       </footer>
 
-      {/* Player Sign Up Modal */}
+      {/* Create Game (20-Min Smart Fixtures) Modal */}
+      <CreateGameSessionModal
+        isOpen={isCreateSessionOpen}
+        onClose={() => setIsCreateSessionOpen(false)}
+        leagueId={activeLeagueId}
+        players={players}
+        previousMatches={matches.filter((m) => m.leagueId === activeLeagueId)}
+        onSaveSession={(session) => {
+          saveNextGameSession(session);
+          setActiveTab('league');
+          setLeagueGamesPanel('next');
+        }}
+        onQuickAddPlayer={(name, score) => quickAddPlayer(name, score, activeLeagueId)}
+        onRenamePlayer={renamePlayer}
+        onRemovePlayer={removePlayer}
+        onOpenFullSignUp={() => setIsSignUpOpen(true)}
+        onOpenImportNextGames={() => openImportModal(false)}
+      />
+
+      {/* Import Next Games from CSV or Google Sheet Modal */}
+      <ImportNextGamesModal
+        key={`import-${isImportNextGamesOpen ? 'open' : 'closed'}-${importDefaultCreateBookings}`}
+        isOpen={isImportNextGamesOpen}
+        onClose={() => setIsImportNextGamesOpen(false)}
+        leagueId={activeLeagueId}
+        players={players}
+        previousMatches={matches.filter((m) => m.leagueId === activeLeagueId)}
+        defaultAlsoCreateBookings={importDefaultCreateBookings}
+        onImportSession={({ session, newPlayers, alsoCreateCourtBookings }) => {
+          importNextGameSession({
+            session,
+            newPlayers,
+            alsoCreateCourtBookings,
+          });
+          setActiveTab('league');
+          setLeagueGamesPanel('next');
+        }}
+      />
+
+      {/* Manage Players (Add / Edit / Remove Players) Modal */}
+      <ManagePlayersModal
+        isOpen={isManagePlayersOpen}
+        onClose={() => setIsManagePlayersOpen(false)}
+        players={players}
+        onQuickAddPlayer={(name, score) => quickAddPlayer(name, score, activeLeagueId)}
+        onRenamePlayer={renamePlayer}
+        onRemovePlayer={removePlayer}
+        onOpenFullSignUp={() => setIsSignUpOpen(true)}
+      />
+
+      {/* Full Player Profile Sign Up Modal */}
       <PlayerSignUpModal
         isOpen={isSignUpOpen}
         onClose={() => setIsSignUpOpen(false)}
-        onRegister={registerPlayer}
+        onRegister={(data) => registerPlayer(data, activeLeagueId)}
       />
 
-      {/* Multi-Option Sign Up Modal (Mixin, League, Both, Casual) */}
+      {/* Multi-Option Sign Up Modal */}
       <SignUpOptionsModal
         isOpen={isSignUpOptionsOpen}
         onClose={() => setIsSignUpOptionsOpen(false)}
@@ -240,8 +356,9 @@ export function App() {
         onConfirmSignUp={(option, notes) => selectSignUpOption(option, currentPlayer.id, notes)}
       />
 
-      {/* Record Match Score Modal */}
+      {/* Easy & Voice Match Score Modal */}
       <ScoreModal
+        key={`${activeLeagueId}-${selectedGameForScore?.id || 'manual'}`}
         isOpen={isScoreModalOpen}
         onClose={() => {
           setIsScoreModalOpen(false);

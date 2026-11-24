@@ -13,16 +13,21 @@ import {
 } from 'lucide-react';
 import { InterestedMember, MemberStatus } from '../types/padel';
 import { RANKING_PRESETS, parseRankingScore, getRankingBadge } from '../utils/rankingData';
+import { PlayerAvatar } from './PlayerAvatar';
 
 interface MembersViewProps {
   members: InterestedMember[];
   onAddMember: (memberData: Omit<InterestedMember, 'id' | 'joinedDate'>) => void;
+  onRemoveMember?: (memberId: string) => void;
+  onOpenManagePlayers?: () => void;
   onOpenSignUpPlayer?: () => void;
 }
 
 export const MembersView: React.FC<MembersViewProps> = ({
   members,
   onAddMember,
+  onRemoveMember,
+  onOpenManagePlayers,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -38,18 +43,6 @@ export const MembersView: React.FC<MembersViewProps> = ({
   const [status, setStatus] = useState<MemberStatus>('Interested in Winter League');
   const [preferredDays, setPreferredDays] = useState('Weekday evenings & Saturdays');
   const [notes, setNotes] = useState('');
-  const [avatar, setAvatar] = useState('https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80');
-
-  const AVATARS = [
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
-    'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=250&q=80',
-    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=250&q=80',
-    'https://images.unsplash.com/photo-1534751516642-a171ed28723c?auto=format&fit=crop&w=250&q=80',
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=250&q=80',
-    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=250&q=80',
-    'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=250&q=80',
-    'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&w=250&q=80',
-  ];
 
   const currentPreset = RANKING_PRESETS[selectedPresetIndex];
   const activeRankingText = rankingMode === 'preset' ? currentPreset.label : manualText || 'Level 3.0 - Club Intermediate';
@@ -63,7 +56,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
       name: name.trim(),
       email: email.trim(),
       phone: phone.trim() || undefined,
-      avatar,
+      avatar: '',
       rankingText: activeRankingText,
       rankingScore: activeRankingScore,
       status,
@@ -110,20 +103,31 @@ export const MembersView: React.FC<MembersViewProps> = ({
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight">
-              PadelSlay Members & Interested Players
+              TuesSlay Members & Interested Players
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl mt-1 leading-relaxed">
-              Sign up as interested to join the official PadelSlay roster, find matching partners for <strong>Mixin Magic</strong> sessions, and get invited to the <strong>Winter Padel Slay League</strong>.
+              Sign up as interested to join the official TuesSlay roster, find matching partners for <strong>Mixin Magic</strong> sessions, and get invited to the <strong>Winter Padel Slay League</strong>.
             </p>
           </div>
 
-          <button
-            onClick={() => setShowInterestModal(true)}
-            className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-sky-500/25 hover:scale-105 active:scale-95 transition-all w-full sm:w-auto"
-          >
-            <UserPlus className="w-4 h-4 font-bold" />
-            <span>Sign Up as Interested</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+            {onOpenManagePlayers && (
+              <button
+                onClick={onOpenManagePlayers}
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 font-bold text-xs uppercase tracking-wider transition w-full sm:w-auto"
+              >
+                <Users className="w-4 h-4 text-sky-400" />
+                <span>Add / Remove League Players</span>
+              </button>
+            )}
+            <button
+              onClick={() => setShowInterestModal(true)}
+              className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-sky-500/25 hover:scale-105 active:scale-95 transition-all w-full sm:w-auto"
+            >
+              <UserPlus className="w-4 h-4 font-bold" />
+              <span>+ Add Member</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -164,7 +168,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
       </div>
 
       {/* Members Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-3 gap-4">
         {filteredMembers.map((member) => {
           const badge = getRankingBadge(member.rankingScore, member.rankingText);
           const isActiveLeague = member.status === 'Active League Player';
@@ -177,13 +181,12 @@ export const MembersView: React.FC<MembersViewProps> = ({
             >
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={member.avatar}
-                      alt={member.name}
-                      className="w-12 h-12 rounded-2xl object-cover ring-2 ring-sky-500/30 group-hover:ring-sky-400/60 transition"
+                  <div className="flex items-center gap-3 min-w-0">
+                    <PlayerAvatar
+                      name={member.name}
+                      className="w-12 h-12 rounded-2xl text-base ring-2 ring-sky-500/30"
                     />
-                    <div>
+                    <div className="min-w-0">
                       <h4 className="font-bold text-white text-sm line-clamp-1 group-hover:text-sky-300 transition">
                         {member.name}
                       </h4>
@@ -233,10 +236,22 @@ export const MembersView: React.FC<MembersViewProps> = ({
               </div>
 
               <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
-                <span>Joined {member.joinedDate}</span>
-                <span className="text-sky-400 font-bold hover:underline cursor-pointer">
-                  Invite to Match →
-                </span>
+                <span>{member.joinedDate ? `Joined ${member.joinedDate}` : 'League Roster'}</span>
+                {onRemoveMember && members.length > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`Remove ${member.name} from the roster?`)) {
+                        onRemoveMember(member.id);
+                      }
+                    }}
+                    className="text-rose-400 hover:text-rose-300 font-bold hover:underline"
+                  >
+                    Remove Player
+                  </button>
+                ) : (
+                  <span className="text-sky-400 font-bold">Active Roster</span>
+                )}
               </div>
             </div>
           );
@@ -258,7 +273,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
                     Sign Up as Interested
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Join the PadelSlay Member Directory & get matched to games
+                    Join the TuesSlay Member Directory & get matched to games
                   </p>
                 </div>
               </div>
@@ -273,28 +288,6 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
             {/* Modal Form */}
             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-sm flex-1">
-              {/* Avatar Selector */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2">
-                  Choose Your Profile Avatar
-                </label>
-                <div className="flex items-center gap-2 overflow-x-auto pb-2">
-                  {AVATARS.map((av, idx) => (
-                    <img
-                      key={idx}
-                      src={av}
-                      alt="avatar"
-                      onClick={() => setAvatar(av)}
-                      className={`w-11 h-11 rounded-xl object-cover cursor-pointer transition ${
-                        avatar === av
-                          ? 'ring-3 ring-sky-400 scale-105'
-                          : 'opacity-60 hover:opacity-100 ring-1 ring-slate-700'
-                      }`}
-                    />
-                  ))}
-                </div>
-              </div>
-
               {/* Name & Email */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Plus } from 'lucide-react';
 import { Player } from '../types/padel';
+import { PlayerAvatar } from './PlayerAvatar';
 
 interface CourtGraphicProps {
   players: {
@@ -34,10 +35,9 @@ export const CourtGraphic: React.FC<CourtGraphicProps> = ({
             title={`${player.name} (${player.rankingText}) - Click to manage`}
           >
             <div className="relative">
-              <img
-                src={player.avatar}
-                alt={player.name}
-                className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover border-2 shadow-lg ${
+              <PlayerAvatar
+                name={player.name}
+                className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full text-sm border-2 shadow-lg ${
                   isTeamA ? 'border-sky-400 ring-2 ring-sky-400/40' : 'border-blue-500 ring-2 ring-blue-500/40'
                 }`}
               />

@@ -1,7 +1,7 @@
 # ==========================================
 # Build Stage
 # ==========================================
-FROM node:20-alpine AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
 
@@ -18,21 +18,26 @@ COPY . .
 RUN npm run build
 
 # ==========================================
-# Production Runtime Stage (Nginx Alpine)
+# Production Runtime Stage (Node + GCS State API)
 # ==========================================
-FROM nginx:alpine
+FROM node:22-slim
 
-# Remove default nginx configurations
-RUN rm -rf /etc/nginx/conf.d/*
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=8080
+ENV GCS_STATE_BUCKET=op-hack-001
+ENV GCS_STATE_OBJECT=slaypadel/tuesslay-state.json
 
-# Copy custom Cloud Run Nginx configuration (configured for port 8080 & SPA fallback)
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Install only production runtime dependencies (@google-cloud/storage)
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Copy compiled static assets from builder stage
-COPY --from=builder /app/dist /usr/share/nginx/html
+# Copy compiled frontend assets and API server
+COPY --from=builder /app/dist ./dist
+COPY server.mjs ./server.mjs
+COPY server ./server
 
-# Cloud Run defaults to listening on port 8080
+# Cloud Run listens on 0.0.0.0:$PORT (8080)
 EXPOSE 8080
 
-# Run nginx in foreground
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "server.mjs"]

@@ -16,20 +16,20 @@ export const Navigation: React.FC<NavigationProps> = ({
 }) => {
   const tabs = [
     {
+      id: 'league' as TabType,
+      label: 'Winter Padel Slay League',
+      mobileLabel: 'League',
+      icon: Trophy,
+      badge: 'Top 3',
+      isLeague: true, // Specifically animated to draw attention
+    },
+    {
       id: 'games' as TabType,
       label: 'Mixin Magic',
       mobileLabel: 'Mixin',
       icon: CalendarDays,
       badge: 'Courts',
       isLeague: false,
-    },
-    {
-      id: 'league' as TabType,
-      label: 'Winter Padel Slay League',
-      mobileLabel: 'Winter Slay',
-      icon: Trophy,
-      badge: 'Top 4',
-      isLeague: true, // Specifically animated to draw attention
     },
     {
       id: 'home' as TabType,
@@ -41,10 +41,10 @@ export const Navigation: React.FC<NavigationProps> = ({
     },
     {
       id: 'members' as TabType,
-      label: 'Members List',
-      mobileLabel: 'Members',
+      label: 'Players & Roster',
+      mobileLabel: 'Players',
       icon: Users,
-      badge: 'Join',
+      badge: undefined,
       isLeague: false,
     },
     {
@@ -67,7 +67,7 @@ export const Navigation: React.FC<NavigationProps> = ({
 
   if (isMobileBottomBar) {
     return (
-      <nav className="w-full flex items-center justify-between px-1 py-1 gap-1">
+      <nav className="w-full grid grid-cols-6 gap-1">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -77,24 +77,18 @@ export const Navigation: React.FC<NavigationProps> = ({
               <button
                 key={tab.id}
                 onClick={() => onSelectTab(tab.id)}
-                className={`relative flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-2xl transition-all ${
+                className={`relative flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all min-w-0 ${
                   isActive
-                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
-                    : 'text-sky-300 hover:text-white bg-slate-800/90 border border-sky-400/50 animate-league-attract'
+                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/30'
+                    : 'text-sky-300 hover:text-white bg-slate-800/90 border border-sky-400/50'
                 }`}
               >
-                {/* Animated Attention Glow Beacon */}
-                <span className="absolute -top-2.5 right-1/2 translate-x-1/2 flex items-center gap-0.5 px-1.5 py-0.2 rounded-full bg-gradient-to-r from-orange-500 to-pink-500 text-white text-[8px] font-black uppercase tracking-wider shadow-md animate-bounce">
-                  <Flame className="w-2.5 h-2.5 fill-yellow-300 text-yellow-300 animate-flame-shimmer" />
-                  <span>HOT</span>
-                </span>
-
-                <div className="relative mt-1">
-                  <Icon className={`w-4 h-4 ${isActive ? 'stroke-[2.5] text-white' : 'text-sky-400'}`} />
-                </div>
-                <span className={`text-[8.5px] mt-0.5 tracking-tight font-black uppercase whitespace-nowrap ${
-                  isActive ? 'text-white' : 'text-sky-300'
-                }`}>
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'stroke-[2.5] text-white' : 'text-sky-400'}`} />
+                <span
+                  className={`text-[9px] mt-0.5 tracking-tight font-black uppercase truncate w-full text-center ${
+                    isActive ? 'text-white' : 'text-sky-300'
+                  }`}
+                >
                   {tab.mobileLabel}
                 </span>
               </button>
@@ -105,21 +99,16 @@ export const Navigation: React.FC<NavigationProps> = ({
             <button
               key={tab.id}
               onClick={() => onSelectTab(tab.id)}
-              className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all relative ${
+              className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all min-w-0 ${
                 isActive
                   ? 'text-sky-400 font-bold bg-sky-500/10'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <div className="relative">
-                <Icon className={`w-4 h-4 ${isActive ? 'stroke-[2.5] text-sky-400' : 'stroke-[1.8]'}`} />
-                {tab.badge && (
-                  <span className="absolute -top-1 -right-2 text-[6.5px] font-black px-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                    {tab.badge}
-                  </span>
-                )}
-              </div>
-              <span className="text-[8.5px] mt-0.5 tracking-tight truncate max-w-[46px]">{tab.mobileLabel}</span>
+              <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'stroke-[2.5] text-sky-400' : 'stroke-[1.8]'}`} />
+              <span className="text-[9px] mt-0.5 tracking-tight truncate w-full text-center">
+                {tab.mobileLabel}
+              </span>
             </button>
           );
         })}
@@ -154,7 +143,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               {/* Eye-catching badge */}
               <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-mono font-black uppercase bg-gradient-to-r from-pink-500 to-orange-500 text-white shadow-sm">
                 <Flame className="w-3 h-3 fill-yellow-300 text-yellow-300 animate-flame-shimmer" />
-                <span>TOP 4 TITANS</span>
+                <span>TOP 3 RANKINGS</span>
               </span>
             </button>
           );

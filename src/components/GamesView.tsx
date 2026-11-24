@@ -11,29 +11,36 @@ import {
   CheckCircle2,
   X,
   UserPlus,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Player, PadelGame, GameFormat, SignUpOption } from '../types/padel';
 import { CourtGraphic } from './CourtGraphic';
 
 interface GamesViewProps {
   games: PadelGame[];
+  players?: Player[];
   currentPlayer: Player;
   onJoinSlot: (gameId: string, slotKey: 'slot1' | 'slot2' | 'slot3' | 'slot4', player: Player) => void;
   onLeaveSlot: (gameId: string, slotKey: 'slot1' | 'slot2' | 'slot3' | 'slot4') => void;
   onCreateGame: (gameData: Omit<PadelGame, 'id' | 'status' | 'hostId' | 'hostName' | 'maxPlayers'>) => void;
   onOpenRecordScore: (game: PadelGame) => void;
+  onQuickAddPlayer?: (name: string, rankingScore?: number) => Player | null;
   onOpenSignUpOptions?: () => void;
+  onOpenImportNextGames?: () => void;
   currentPlan?: SignUpOption;
 }
 
 export const GamesView: React.FC<GamesViewProps> = ({
   games,
+  players = [],
   currentPlayer,
   onJoinSlot,
   onLeaveSlot,
   onCreateGame,
   onOpenRecordScore,
+  onQuickAddPlayer,
   onOpenSignUpOptions,
+  onOpenImportNextGames,
   currentPlan,
 }) => {
   const [filter, setFilter] = useState<'all' | 'mixin' | 'open' | 'my-games' | 'league'>('all');
@@ -42,18 +49,49 @@ export const GamesView: React.FC<GamesViewProps> = ({
 
   // New game form state
   const [courtName, setCourtName] = useState('Court 1 - Pink Glass Arena (Indoor)');
-  const [location, setLocation] = useState('PadelSlay Central Hub, Court 1');
+  const [location, setLocation] = useState('TuesSlay Central Hub, Court 1');
   const [isIndoor, setIsIndoor] = useState(true);
-  const [date, setDate] = useState('2026-10-16');
-  const [time, setTime] = useState('18:30');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('18:00');
   const [durationMinutes, setDurationMinutes] = useState(90);
   const [format, setFormat] = useState<GameFormat>('Casual 4-Player');
   const [targetLevel, setTargetLevel] = useState('3.5 - 4.5');
   const [pricePerPlayer, setPricePerPlayer] = useState(14);
   const [notes, setNotes] = useState('Mixin Magic session! Bring your best energy.');
+  const [selectedSlotPlayerIds, setSelectedSlotPlayerIds] = useState<string[]>([
+    currentPlayer.id,
+  ]);
+  const [inlineNewPlayerName, setInlineNewPlayerName] = useState('');
+
+  const toggleSlotPlayer = (playerId: string) => {
+    setSelectedSlotPlayerIds((prev) => {
+      if (prev.includes(playerId)) {
+        return prev.filter((id) => id !== playerId);
+      }
+      if (prev.length >= 4) return prev;
+      return [...prev, playerId];
+    });
+  };
+
+  const handleQuickAddInModal = () => {
+    const trimmed = inlineNewPlayerName.trim();
+    if (!trimmed || !onQuickAddPlayer) return;
+    const created = onQuickAddPlayer(trimmed, 4.0);
+    if (created) {
+      setSelectedSlotPlayerIds((prev) =>
+        prev.length < 4 ? [...prev, created.id] : prev
+      );
+      setInlineNewPlayerName('');
+    }
+  };
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const chosenPlayers = selectedSlotPlayerIds
+      .map((id) => players.find((p) => p.id === id))
+      .filter((p): p is Player => Boolean(p));
+    const finalPlayers = chosenPlayers.length > 0 ? chosenPlayers : [currentPlayer];
+
     onCreateGame({
       courtName,
       location,
@@ -65,7 +103,10 @@ export const GamesView: React.FC<GamesViewProps> = ({
       targetLevel,
       pricePerPlayer,
       players: {
-        slot1: currentPlayer, // Host joins slot 1 by default
+        slot1: finalPlayers[0],
+        slot2: finalPlayers[1],
+        slot3: finalPlayers[2],
+        slot4: finalPlayers[3],
       },
       notes,
     });
@@ -139,6 +180,17 @@ export const GamesView: React.FC<GamesViewProps> = ({
             <Plus className="w-4 h-4 font-bold text-sky-400" />
             <span>+ Host Game Session</span>
           </button>
+
+          {onOpenImportNextGames && (
+            <button
+              type="button"
+              onClick={onOpenImportNextGames}
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-black text-xs uppercase tracking-wider shadow-md hover:scale-105 active:scale-95 transition-all w-full sm:w-auto cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              <span>Import CSV / Sheet</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -185,8 +237,26 @@ export const GamesView: React.FC<GamesViewProps> = ({
       </div>
 
       {/* Games List Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {filteredGames.map((game) => {
+      {filteredGames.length === 0 ? (
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-8 text-center space-y-3 shadow-2xl">
+          <Sparkles className="w-8 h-8 text-sky-400 mx-auto" />
+          <h3 className="text-base font-black text-white uppercase">
+            No Open Court Bookings Scheduled
+          </h3>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            Click <strong>+ Host Game Session</strong> to schedule a court booking, or use <strong>Create Game</strong> in the League tab for 20-minute round-robin matches.
+          </p>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-sky-500/25 transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Host Game Session</span>
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-5">
+          {filteredGames.map((game) => {
           const filledSlotsCount = Object.values(game.players).filter(Boolean).length;
           const userIsInGame = isPlayerInGame(game, currentPlayer.id);
           const userSlotKey = getSlotKeyForPlayer(game, currentPlayer.id);
@@ -328,7 +398,8 @@ export const GamesView: React.FC<GamesViewProps> = ({
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
 
       {/* Host New Game Modal */}
       {showCreateModal && (
@@ -472,6 +543,67 @@ export const GamesView: React.FC<GamesViewProps> = ({
                     className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-sky-400"
                   />
                 </div>
+              </div>
+
+              {/* Add / Select Players for this Court Session */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-sky-400" />
+                    Players ({selectedSlotPlayerIds.length}/4 Court Slots)
+                  </label>
+                  <span className="text-[10px] text-slate-400">Tap up to 4 players</span>
+                </div>
+
+                {onQuickAddPlayer && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={inlineNewPlayerName}
+                      onChange={(e) => setInlineNewPlayerName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleQuickAddInModal();
+                        }
+                      }}
+                      placeholder="Add new player name to roster..."
+                      className="flex-1 min-w-0 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleQuickAddInModal}
+                      disabled={!inlineNewPlayerName.trim()}
+                      className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 disabled:opacity-40 text-emerald-300 border border-emerald-500/40 text-xs font-black uppercase tracking-wider flex items-center gap-1 shrink-0 transition"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>+ Add</span>
+                    </button>
+                  </div>
+                )}
+
+                {players.length > 0 && (
+                  <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                    {players.map((p) => {
+                      const checked = selectedSlotPlayerIds.includes(p.id);
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => toggleSlotPlayer(p.id)}
+                          className={`px-2.5 py-1.5 rounded-xl border text-left text-xs font-bold truncate transition ${
+                            checked
+                              ? 'bg-sky-500/20 border-sky-400 text-white'
+                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {checked ? '✓ ' : '+ '}
+                          {p.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div>
