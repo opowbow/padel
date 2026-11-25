@@ -8,14 +8,34 @@ import {
   Mic,
   MicOff,
   Calendar,
+  Trash2,
 } from 'lucide-react';
-import { Player, League } from '../types/padel';
+import { Player, League, RecordedMatch } from '../types/padel';
 import { calculateMatchScoring } from '../utils/scoringEngine';
 import {
   parseGeneralVoiceMatch,
   isBrowserSpeechSupported,
 } from '../utils/voiceScoreParser';
 import { getShortPlayerName } from '../utils/teamGenerator';
+
+export interface ScoreModalSubmitParams {
+  leagueId: string;
+  gameId?: string;
+  date?: string;
+  round?: string;
+  timeSlot?: string;
+  courtName: string;
+  teamAPlayer1: Player;
+  teamAPlayer2: Player;
+  teamBPlayer1: Player;
+  teamBPlayer2: Player;
+  setScores: string[];
+  teamASetsWon: number;
+  teamBSetsWon: number;
+  teamAPointsWon: number;
+  teamBPointsWon: number;
+  winnerTeam: 'A' | 'B' | 'Tie';
+}
 
 interface ScoreModalProps {
   isOpen: boolean;
@@ -32,24 +52,19 @@ interface ScoreModalProps {
     slot3?: Player;
     slot4?: Player;
   };
-  onRecordScore: (params: {
-    leagueId: string;
-    gameId?: string;
-    date?: string;
-    round?: string;
-    timeSlot?: string;
-    courtName: string;
-    teamAPlayer1: Player;
-    teamAPlayer2: Player;
-    teamBPlayer1: Player;
-    teamBPlayer2: Player;
-    setScores: string[];
-    teamASetsWon: number;
-    teamBSetsWon: number;
-    teamAPointsWon: number;
-    teamBPointsWon: number;
-    winnerTeam: 'A' | 'B' | 'Tie';
-  }) => void;
+  editingMatch?: RecordedMatch | null;
+  onRecordScore: (params: ScoreModalSubmitParams) => void;
+  onUpdateScore?: (matchId: string, params: ScoreModalSubmitParams) => void;
+  onDeleteMatch?: (matchId: string) => void;
+}
+
+function parseInitialSetPair(raw: string | undefined, fallbackA: number, fallbackB: number): [string, string] {
+  if (!raw) return [String(fallbackA), String(fallbackB)];
+  const parts = raw.split('-');
+  if (parts.length === 2) {
+    return [parts[0].trim() || '0', parts[1].trim() || '0'];
+  }
+  return [String(fallbackA), String(fallbackB)];
 }
 
 export const ScoreModal: React.FC<ScoreModalProps> = ({
@@ -62,40 +77,70 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
   preselectedLeagueId,
   preselectedGameId,
   preselectedPlayers,
+  editingMatch,
   onRecordScore,
+  onUpdateScore,
+  onDeleteMatch,
 }) => {
-  const [leagueId, setLeagueId] = useState(preselectedLeagueId || leagues[0]?.id || '');
-  const [date, setDate] = useState('');
-  const [round, setRound] = useState('Round 1');
-  const [courtName, setCourtName] = useState('Court 1');
-  const [scoreMode, setScoreMode] = useState<'quick' | 'sets'>('quick');
+  const isEditing = Boolean(editingMatch);
+  const [leagueId, setLeagueId] = useState(
+    editingMatch?.leagueId || preselectedLeagueId || leagues[0]?.id || ''
+  );
+  const [date, setDate] = useState(editingMatch?.date || '');
+  const [round, setRound] = useState(editingMatch?.round || 'Round 1');
+  const [timeSlot, setTimeSlot] = useState(editingMatch?.timeSlot || '');
+  const [courtName, setCourtName] = useState(editingMatch?.courtName || 'Court 1');
+  const [scoreMode, setScoreMode] = useState<'quick' | 'sets'>(
+    editingMatch && editingMatch.setScores.length > 1 ? 'sets' : 'quick'
+  );
 
   // Player selection
   const [teamAPlayer1Id, setTeamAPlayer1Id] = useState(
-    preselectedPlayers?.slot1?.id || players[0]?.id || activePlayer.id
+    editingMatch?.teamA.player1.id ||
+      preselectedPlayers?.slot1?.id ||
+      players[0]?.id ||
+      activePlayer.id
   );
   const [teamAPlayer2Id, setTeamAPlayer2Id] = useState(
-    preselectedPlayers?.slot2?.id || players[1]?.id || activePlayer.id
+    editingMatch?.teamA.player2.id ||
+      preselectedPlayers?.slot2?.id ||
+      players[1]?.id ||
+      activePlayer.id
   );
   const [teamBPlayer1Id, setTeamBPlayer1Id] = useState(
-    preselectedPlayers?.slot3?.id || players[2]?.id || activePlayer.id
+    editingMatch?.teamB.player1.id ||
+      preselectedPlayers?.slot3?.id ||
+      players[2]?.id ||
+      activePlayer.id
   );
   const [teamBPlayer2Id, setTeamBPlayer2Id] = useState(
-    preselectedPlayers?.slot4?.id || players[3]?.id || activePlayer.id
+    editingMatch?.teamB.player2.id ||
+      preselectedPlayers?.slot4?.id ||
+      players[3]?.id ||
+      activePlayer.id
   );
 
   // Quick 20-min game scores
-  const [quickScoreA, setQuickScoreA] = useState<number>(6);
-  const [quickScoreB, setQuickScoreB] = useState<number>(2);
+  const [quickScoreA, setQuickScoreA] = useState<number>(
+    editingMatch ? editingMatch.teamA.pointsWon : 6
+  );
+  const [quickScoreB, setQuickScoreB] = useState<number>(
+    editingMatch ? editingMatch.teamB.pointsWon : 2
+  );
 
   // Multi-set scores
-  const [set1A, setSet1A] = useState('6');
-  const [set1B, setSet1B] = useState('4');
-  const [set2A, setSet2A] = useState('4');
-  const [set2B, setSet2B] = useState('6');
-  const [set3A, setSet3A] = useState('6');
-  const [set3B, setSet3B] = useState('3');
-  const [hasThirdSet, setHasThirdSet] = useState(true);
+  const initS1 = parseInitialSetPair(editingMatch?.setScores[0], 6, 4);
+  const initS2 = parseInitialSetPair(editingMatch?.setScores[1], 4, 6);
+  const initS3 = parseInitialSetPair(editingMatch?.setScores[2], 6, 3);
+  const [set1A, setSet1A] = useState(initS1[0]);
+  const [set1B, setSet1B] = useState(initS1[1]);
+  const [set2A, setSet2A] = useState(initS2[0]);
+  const [set2B, setSet2B] = useState(initS2[1]);
+  const [set3A, setSet3A] = useState(initS3[0]);
+  const [set3B, setSet3B] = useState(initS3[1]);
+  const [hasThirdSet, setHasThirdSet] = useState(
+    editingMatch ? editingMatch.setScores.length >= 3 : true
+  );
 
   // Voice input state
   const [isListening, setIsListening] = useState(false);
@@ -258,11 +303,12 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
         ? [`${num1A}-${num1B}`, `${num2A}-${num2B}`, `${num3A}-${num3B}`]
         : [`${num1A}-${num1B}`, `${num2A}-${num2B}`];
 
-    onRecordScore({
+    const payload: ScoreModalSubmitParams = {
       leagueId,
-      gameId: preselectedGameId,
+      gameId: editingMatch?.gameId ?? preselectedGameId,
       date,
       round,
+      timeSlot: timeSlot || undefined,
       courtName,
       teamAPlayer1: pA1,
       teamAPlayer2: pA2,
@@ -274,10 +320,19 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
       teamAPointsWon: totalPointsA,
       teamBPointsWon: totalPointsB,
       winnerTeam,
-    });
+    };
+
+    if (editingMatch && onUpdateScore) {
+      onUpdateScore(editingMatch.id, payload);
+    } else {
+      onRecordScore(payload);
+    }
 
     onClose();
   };
+
+  const standardRounds = ['Round 1', 'Round 2', 'Round 3', 'Round 4', 'Round 5', 'Round 6', 'League Match'];
+  const standardCourts = ['Court 1', 'Court 2', 'Court 3', 'Court 4'];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
@@ -290,10 +345,12 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-wide">
-                Easy & Voice Match Score Entry
+                {isEditing ? 'Edit Recorded Match Score' : 'Easy & Voice Match Score Entry'}
               </h3>
               <p className="text-xs text-slate-400">
-                Speak score or tap numbers to update Top 3 & Full League Standings
+                {isEditing
+                  ? 'Update score, teams, or details — League Table recalculates automatically'
+                  : 'Speak score or tap numbers to update Top 3 & Full League Standings'}
               </p>
             </div>
           </div>
@@ -387,11 +444,15 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
                 onChange={(e) => setRound(e.target.value)}
                 className="w-full px-2.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs focus:outline-none focus:border-sky-400"
               >
+                {!standardRounds.includes(round) && round && (
+                  <option value={round}>{round}</option>
+                )}
                 <option value="Round 1">Round 1</option>
                 <option value="Round 2">Round 2</option>
                 <option value="Round 3">Round 3</option>
                 <option value="Round 4">Round 4</option>
                 <option value="Round 5">Round 5</option>
+                <option value="Round 6">Round 6</option>
                 <option value="League Match">Single Match</option>
               </select>
             </div>
@@ -405,6 +466,9 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
                 onChange={(e) => setCourtName(e.target.value)}
                 className="w-full px-2.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs focus:outline-none focus:border-sky-400"
               >
+                {!standardCourts.includes(courtName) && courtName && (
+                  <option value={courtName}>{courtName}</option>
+                )}
                 <option value="Court 1">Court 1</option>
                 <option value="Court 2">Court 2</option>
                 <option value="Court 3">Court 3</option>
@@ -429,6 +493,21 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
               </select>
             </div>
           </div>
+
+          {isEditing && (
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                Time Slot (Optional)
+              </label>
+              <input
+                type="text"
+                value={timeSlot}
+                onChange={(e) => setTimeSlot(e.target.value)}
+                placeholder="e.g. 18:00–18:20"
+                className="w-full px-2.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs focus:outline-none focus:border-sky-400"
+              />
+            </div>
+          )}
 
           {/* Teams Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -756,13 +835,35 @@ export const ScoreModal: React.FC<ScoreModalProps> = ({
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-sky-500/25 transition flex items-center justify-center gap-2"
-          >
-            <CheckCircle className="w-5 h-5 font-bold" />
-            <span>Save Score & Update Standings</span>
-          </button>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            {isEditing && editingMatch && onDeleteMatch && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('Delete this recorded match score from the league?')) {
+                    onDeleteMatch(editingMatch.id);
+                    onClose();
+                  }
+                }}
+                className="px-4 py-3.5 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/40 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition shrink-0 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete Record</span>
+              </button>
+            )}
+
+            <button
+              type="submit"
+              className="flex-1 py-3.5 px-4 rounded-2xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-sky-500/25 transition flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <CheckCircle className="w-5 h-5 font-bold" />
+              <span>
+                {isEditing
+                  ? 'Save Updated Score & Recalculate League'
+                  : 'Save Score & Update Standings'}
+              </span>
+            </button>
+          </div>
         </form>
       </div>
     </div>

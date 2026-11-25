@@ -5,6 +5,7 @@ import {
   RecordedMatch,
   WeeklyAward,
   InterestedMember,
+  StarOfTheNight,
 } from '../types/padel';
 import { calculateMatchScoring } from './scoringEngine';
 
@@ -470,6 +471,13 @@ export const INITIAL_LEAGUES: League[] = [
 // No sample open games or sample historical awards
 export const INITIAL_GAMES: PadelGame[] = [];
 export const INITIAL_WEEKLY_AWARDS: WeeklyAward[] = [];
+
+export const INITIAL_STAR_OF_THE_NIGHT: StarOfTheNight = {
+  playerId: BASE_PLAYERS.franny.id,
+  playerName: BASE_PLAYERS.franny.name,
+  reason: 'For her padel cat walk',
+  nominatedBy: 'Folks who were there',
+};
 
 export const INITIAL_MEMBERS: InterestedMember[] = INITIAL_PLAYERS.map((p, idx) => ({
   id: `mem-${idx + 1}`,

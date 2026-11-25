@@ -13,11 +13,13 @@ import {
   UserPlus,
   FileSpreadsheet,
 } from 'lucide-react';
-import { Player, PadelGame, GameFormat, SignUpOption } from '../types/padel';
+import { Player, PadelGame, GameFormat, SignUpOption, RecordedMatch } from '../types/padel';
 import { CourtGraphic } from './CourtGraphic';
+import { getShortPlayerName } from '../utils/teamGenerator';
 
 interface GamesViewProps {
   games: PadelGame[];
+  matches?: RecordedMatch[];
   players?: Player[];
   currentPlayer: Player;
   onJoinSlot: (gameId: string, slotKey: 'slot1' | 'slot2' | 'slot3' | 'slot4', player: Player) => void;
@@ -32,6 +34,7 @@ interface GamesViewProps {
 
 export const GamesView: React.FC<GamesViewProps> = ({
   games,
+  matches = [],
   players = [],
   currentPlayer,
   onJoinSlot,
@@ -260,6 +263,7 @@ export const GamesView: React.FC<GamesViewProps> = ({
           const filledSlotsCount = Object.values(game.players).filter(Boolean).length;
           const userIsInGame = isPlayerInGame(game, currentPlayer.id);
           const userSlotKey = getSlotKeyForPlayer(game, currentPlayer.id);
+          const linkedMatch = matches.find((m) => m.gameId === game.id);
 
           return (
             <div
@@ -343,6 +347,26 @@ export const GamesView: React.FC<GamesViewProps> = ({
                 />
               </div>
 
+              {/* Recorded Score Banner when this Game has a saved result (Read-Only) */}
+              {linkedMatch && (
+                <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/35 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black uppercase">
+                      ✓ Score Saved in League
+                    </span>
+                    <span className="font-bold text-white truncate">
+                      {getShortPlayerName(linkedMatch.teamA.player1)} &{' '}
+                      {getShortPlayerName(linkedMatch.teamA.player2)}{' '}
+                      <span className="px-1.5 py-0.5 rounded bg-slate-900 font-mono text-sky-300 mx-1">
+                        {linkedMatch.setScores.join(', ')}
+                      </span>{' '}
+                      {getShortPlayerName(linkedMatch.teamB.player1)} &{' '}
+                      {getShortPlayerName(linkedMatch.teamB.player2)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Bottom Actions & User Status */}
               <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
                 <div className="text-xs">
@@ -354,14 +378,14 @@ export const GamesView: React.FC<GamesViewProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {userIsInGame && userSlotKey ? (
+                  {userIsInGame && userSlotKey && !linkedMatch ? (
                     <button
                       onClick={() => onLeaveSlot(game.id, userSlotKey)}
                       className="px-4 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/40 text-xs font-bold transition"
                     >
                       Leave Slot
                     </button>
-                  ) : filledSlotsCount < 4 ? (
+                  ) : filledSlotsCount < 4 && !linkedMatch ? (
                     <button
                       onClick={() => {
                         const firstOpen = !game.players.slot1
@@ -377,20 +401,21 @@ export const GamesView: React.FC<GamesViewProps> = ({
                     >
                       Quick Join Slot
                     </button>
-                  ) : (
+                  ) : !linkedMatch ? (
                     <span className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-400 text-xs font-bold">
                       Match Full
                     </span>
-                  )}
+                  ) : null}
 
-                  {/* Record Score Button if filled */}
-                  {filledSlotsCount === 4 && (
+                  {/* Record New Score Button (only when not yet scored) */}
+                  {!linkedMatch && (
                     <button
+                      type="button"
                       onClick={() => onOpenRecordScore(game)}
-                      className="px-3.5 py-2 rounded-xl bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border border-orange-500/40 text-xs font-bold flex items-center gap-1.5 transition"
+                      className="px-3.5 py-2 rounded-xl bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border border-orange-500/40 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
                     >
                       <Trophy className="w-3.5 h-3.5" />
-                      <span>Record Score</span>
+                      <span>{filledSlotsCount === 4 ? 'Record Score' : 'Add Score'}</span>
                     </button>
                   )}
                 </div>

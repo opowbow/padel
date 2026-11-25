@@ -170,6 +170,34 @@ export interface WeeklyAward {
   badge: string;
 }
 
+export interface StarOfTheNight {
+  playerId: string;
+  playerName: string;
+  reason: string;
+  nominatedBy: string;
+  updatedAt?: string;
+}
+
+export interface WeeklyMvpStanding {
+  player: Player;
+  weekPoints: number;
+  pointsWon: number;
+  pointsLost: number;
+  pointDiff: number;
+  played: number;
+  won: number;
+  lost: number;
+  drawn: number;
+  winRate: number;
+  form: ('W' | 'L' | 'D')[];
+}
+
+export interface WeeklyMvpResult extends WeeklyMvpStanding {
+  sessionLabel: string;
+  commentary: string;
+  runnerUps: WeeklyMvpStanding[];
+}
+
 export type MemberStatus = 'Active League Player' | 'Interested in Winter League' | 'Looking for Mixin Group' | 'Weekend Social';
 
 export interface InterestedMember {

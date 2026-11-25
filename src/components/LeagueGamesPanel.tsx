@@ -63,7 +63,7 @@ export const LeagueGamesPanel: React.FC<LeagueGamesPanelProps> = ({
       { key: string; date: string; matches: RecordedMatch[] }
     >();
     for (const m of matches) {
-      const key = m.sessionId || m.date;
+      const key = m.date ? `date:${m.date}` : m.sessionId || 'session-spreadsheet-1';
       const existing = map.get(key);
       if (existing) {
         existing.matches.push(m);
@@ -87,6 +87,14 @@ export const LeagueGamesPanel: React.FC<LeagueGamesPanelProps> = ({
   const [listeningTarget, setListeningTarget] = useState<string | null>(null);
   const [voiceFeedback, setVoiceFeedback] = useState<string>('');
   const [quickVoiceText, setQuickVoiceText] = useState<string>('');
+  const [savedBanner, setSavedBanner] = useState<string>('');
+
+  const showSavedConfirmation = (msg: string) => {
+    setSavedBanner(msg);
+    window.setTimeout(() => {
+      setSavedBanner((prev) => (prev === msg ? '' : prev));
+    }, 4500);
+  };
 
   const startVoiceCapture = (fixture?: ScheduledFixture) => {
     if (!isBrowserSpeechSupported()) {
@@ -313,12 +321,13 @@ export const LeagueGamesPanel: React.FC<LeagueGamesPanelProps> = ({
                   {roundMatches.map((m) => {
                     const aWon = m.winnerTeam === 'A';
                     const bWon = m.winnerTeam === 'B';
+
                     return (
                       <div
                         key={m.id}
                         className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-2.5 hover:border-slate-700 transition"
                       >
-                        <div className="flex items-center justify-between text-[11px] font-mono">
+                        <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
                           <span className="font-bold text-sky-300">🏟️ {m.courtName}</span>
                           {m.date ? (
                             <span className="text-slate-400">{m.date}</span>
@@ -569,8 +578,15 @@ export const LeagueGamesPanel: React.FC<LeagueGamesPanelProps> = ({
               {readyToSaveCount > 0 && (
                 <button
                   type="button"
-                  onClick={() => onRecordAllScoredFixtures()}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 transition"
+                  onClick={() => {
+                    const savedCount = onRecordAllScoredFixtures();
+                    if (savedCount > 0) {
+                      showSavedConfirmation(
+                        `Saved ${savedCount} match score${savedCount > 1 ? 's' : ''} — League Table calculated automatically!`
+                      );
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 transition cursor-pointer"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Save All {readyToSaveCount} Score{readyToSaveCount > 1 ? 's' : ''}</span>
@@ -608,6 +624,19 @@ export const LeagueGamesPanel: React.FC<LeagueGamesPanelProps> = ({
                 🎙️ {voiceFeedback}
               </p>
             )}
+
+            {savedBanner && (
+              <div className="px-3.5 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center justify-between gap-2">
+                <span>✓ {savedBanner}</span>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="text-[11px] font-black text-sky-300 hover:underline shrink-0 cursor-pointer"
+                >
+                  View League Table →
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Rounds & 20-Minute Court Cards */}
@@ -636,7 +665,8 @@ export const LeagueGamesPanel: React.FC<LeagueGamesPanelProps> = ({
                     {roundFixtures.map((fix) => {
                       const sA = fix.teamAScore;
                       const sB = fix.teamBScore;
-                      const canSave = !fix.completed && sA !== undefined && sB !== undefined;
+                      const isInteractive = !fix.completed;
+                      const canSave = isInteractive && sA !== undefined && sB !== undefined;
 
                       return (
                         <div
@@ -684,7 +714,7 @@ export const LeagueGamesPanel: React.FC<LeagueGamesPanelProps> = ({
                               </span>
 
                               <div className="flex items-center gap-1 shrink-0">
-                                {!fix.completed && (
+                                {isInteractive && (
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -699,10 +729,33 @@ export const LeagueGamesPanel: React.FC<LeagueGamesPanelProps> = ({
                                     -
                                   </button>
                                 )}
-                                <span className="w-8 h-7 rounded-lg bg-slate-950 border border-sky-500/40 flex items-center justify-center font-mono font-black text-sm text-sky-300">
-                                  {sA !== undefined ? sA : '–'}
-                                </span>
-                                {!fix.completed && (
+                                {isInteractive ? (
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={99}
+                                    value={sA !== undefined ? sA : ''}
+                                    placeholder="–"
+                                    onChange={(e) => {
+                                      const raw = e.target.value;
+                                      const nextA =
+                                        raw === ''
+                                          ? undefined
+                                          : Math.max(0, parseInt(raw, 10) || 0);
+                                      onUpdateFixtureDraftScore(
+                                        fix.id,
+                                        nextA,
+                                        nextA !== undefined ? sB ?? 0 : sB
+                                      );
+                                    }}
+                                    className="w-9 h-7 text-center rounded-lg bg-slate-950 border border-sky-500/40 font-mono font-black text-sm text-sky-300 focus:outline-none"
+                                  />
+                                ) : (
+                                  <span className="w-8 h-7 rounded-lg bg-slate-950 border border-sky-500/40 flex items-center justify-center font-mono font-black text-sm text-sky-300">
+                                    {sA !== undefined ? sA : '–'}
+                                  </span>
+                                )}
+                                {isInteractive && (
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -716,7 +769,7 @@ export const LeagueGamesPanel: React.FC<LeagueGamesPanelProps> = ({
                               </div>
                             </div>
 
-                            {!fix.completed && (
+                            {isInteractive && (
                               <div className="flex items-center gap-1 justify-end">
                                 {[0, 1, 2, 3, 4, 5, 6, 7].map((n) => (
                                   <button
@@ -747,7 +800,7 @@ export const LeagueGamesPanel: React.FC<LeagueGamesPanelProps> = ({
                               </span>
 
                               <div className="flex items-center gap-1 shrink-0">
-                                {!fix.completed && (
+                                {isInteractive && (
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -762,10 +815,33 @@ export const LeagueGamesPanel: React.FC<LeagueGamesPanelProps> = ({
                                     -
                                   </button>
                                 )}
-                                <span className="w-8 h-7 rounded-lg bg-slate-950 border border-orange-500/40 flex items-center justify-center font-mono font-black text-sm text-orange-300">
-                                  {sB !== undefined ? sB : '–'}
-                                </span>
-                                {!fix.completed && (
+                                {isInteractive ? (
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={99}
+                                    value={sB !== undefined ? sB : ''}
+                                    placeholder="–"
+                                    onChange={(e) => {
+                                      const raw = e.target.value;
+                                      const nextB =
+                                        raw === ''
+                                          ? undefined
+                                          : Math.max(0, parseInt(raw, 10) || 0);
+                                      onUpdateFixtureDraftScore(
+                                        fix.id,
+                                        nextB !== undefined ? sA ?? 0 : sA,
+                                        nextB
+                                      );
+                                    }}
+                                    className="w-9 h-7 text-center rounded-lg bg-slate-950 border border-orange-500/40 font-mono font-black text-sm text-orange-300 focus:outline-none"
+                                  />
+                                ) : (
+                                  <span className="w-8 h-7 rounded-lg bg-slate-950 border border-orange-500/40 flex items-center justify-center font-mono font-black text-sm text-orange-300">
+                                    {sB !== undefined ? sB : '–'}
+                                  </span>
+                                )}
+                                {isInteractive && (
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -779,7 +855,7 @@ export const LeagueGamesPanel: React.FC<LeagueGamesPanelProps> = ({
                               </div>
                             </div>
 
-                            {!fix.completed && (
+                            {isInteractive && (
                               <div className="flex items-center gap-1 justify-end">
                                 {[0, 1, 2, 3, 4, 5, 6, 7].map((n) => (
                                   <button
@@ -804,8 +880,16 @@ export const LeagueGamesPanel: React.FC<LeagueGamesPanelProps> = ({
                           {canSave && (
                             <button
                               type="button"
-                              onClick={() => onRecordSingleFixture(fix.id)}
-                              className="w-full py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition"
+                              onClick={() => {
+                                onRecordSingleFixture(fix.id, {
+                                  teamAScore: sA,
+                                  teamBScore: sB,
+                                });
+                                showSavedConfirmation(
+                                  `Saved ${fix.courtName} (${sA}-${sB}) — League Table calculated automatically!`
+                                );
+                              }}
+                              className="w-full py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition cursor-pointer"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               <span>Save Match Score ({sA}-{sB})</span>

@@ -20,7 +20,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       label: 'Winter Padel Slay League',
       mobileLabel: 'League',
       icon: Trophy,
-      badge: 'Top 3',
+      badge: 'Standings',
       isLeague: true, // Specifically animated to draw attention
     },
     {
@@ -143,7 +143,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               {/* Eye-catching badge */}
               <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-mono font-black uppercase bg-gradient-to-r from-pink-500 to-orange-500 text-white shadow-sm">
                 <Flame className="w-3 h-3 fill-yellow-300 text-yellow-300 animate-flame-shimmer" />
-                <span>TOP 3 RANKINGS</span>
+                <span>LEADER • MVP • STAR</span>
               </span>
             </button>
           );

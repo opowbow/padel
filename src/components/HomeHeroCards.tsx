@@ -5,10 +5,15 @@ import {
   ArrowRight,
   Flame,
   Users,
-  ChevronRight,
-  CheckCircle,
+  Zap,
+  Star,
 } from 'lucide-react';
-import { PadelGame, LeagueStanding } from '../types/padel';
+import {
+  PadelGame,
+  LeagueStanding,
+  WeeklyMvpResult,
+  StarOfTheNight,
+} from '../types/padel';
 import { PlayerAvatar } from './PlayerAvatar';
 
 interface HomeHeroCardsProps {
@@ -17,6 +22,8 @@ interface HomeHeroCardsProps {
   onNavigateToMembers: () => void;
   onOpenRecordScore: () => void;
   topStandings: LeagueStanding[];
+  weeklyMvp?: WeeklyMvpResult;
+  starOfTheNight?: StarOfTheNight;
   activeGames: PadelGame[];
 }
 
@@ -26,9 +33,11 @@ export const HomeHeroCards: React.FC<HomeHeroCardsProps> = ({
   onNavigateToMembers,
   onOpenRecordScore,
   topStandings,
+  weeklyMvp,
+  starOfTheNight,
   activeGames,
 }) => {
-  const top3 = topStandings.slice(0, 3);
+  const leader = topStandings[0];
 
   // Filter games for Mixin and League
   const openSpotsCount = activeGames.reduce((acc, g) => {
@@ -147,44 +156,71 @@ export const HomeHeroCards: React.FC<HomeHeroCardsProps> = ({
               </p>
             </div>
 
-            {/* Top 3 Players Showcase */}
+            {/* Leader, Week MVP & Star of the Night Showcase */}
             <div className="space-y-2 pt-2">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Top 3 League Rankings:
+                League Leader • Week MVP • Star of the Night:
               </span>
               <div className="grid grid-cols-1 @xl:grid-cols-3 gap-2 text-xs">
-                {top3.map((standing, idx) => (
-                  <div
-                    key={standing.playerId}
-                    className="p-2 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center gap-2.5"
-                  >
-                    <div
-                      className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-xs font-mono shrink-0 ${
-                        idx === 0
-                          ? 'bg-amber-400 text-slate-950'
-                          : idx === 1
-                          ? 'bg-slate-300 text-slate-950'
-                          : idx === 2
-                          ? 'bg-orange-600 text-white'
-                          : 'bg-sky-600 text-white'
-                      }`}
-                    >
-                      {idx + 1}
+                {leader && (
+                  <div className="p-2 rounded-xl bg-slate-950/70 border border-amber-500/30 flex items-center gap-2.5">
+                    <div className="w-6 h-6 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center shrink-0">
+                      <Trophy className="w-3.5 h-3.5" />
                     </div>
                     <PlayerAvatar
-                      name={standing.player.name}
-                      className="w-7 h-7 rounded-lg text-xs ring-1 ring-slate-700"
+                      name={leader.player.name}
+                      className="w-7 h-7 rounded-lg text-xs ring-1 ring-amber-400/60"
                     />
                     <div className="truncate flex-1">
-                      <span className="font-bold text-white block text-[11px] truncate">
-                        {standing.player.name}
+                      <span className="text-[9px] text-amber-400 font-black uppercase block">
+                        Leader
                       </span>
-                      <span className="text-[9px] text-sky-400 font-mono font-bold">
-                        {standing.leaguePoints} pts
+                      <span className="font-bold text-white block text-[11px] truncate">
+                        {leader.player.name}
                       </span>
                     </div>
                   </div>
-                ))}
+                )}
+
+                {weeklyMvp?.player && (
+                  <div className="p-2 rounded-xl bg-slate-950/70 border border-sky-500/30 flex items-center gap-2.5">
+                    <div className="w-6 h-6 rounded-lg bg-sky-500 text-white flex items-center justify-center shrink-0">
+                      <Zap className="w-3.5 h-3.5 fill-white" />
+                    </div>
+                    <PlayerAvatar
+                      name={weeklyMvp.player.name}
+                      className="w-7 h-7 rounded-lg text-xs ring-1 ring-sky-400/60"
+                    />
+                    <div className="truncate flex-1">
+                      <span className="text-[9px] text-sky-300 font-black uppercase block">
+                        Week MVP
+                      </span>
+                      <span className="font-bold text-white block text-[11px] truncate">
+                        {weeklyMvp.player.name}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {starOfTheNight && (
+                  <div className="p-2 rounded-xl bg-slate-950/70 border border-pink-500/30 flex items-center gap-2.5">
+                    <div className="w-6 h-6 rounded-lg bg-pink-500 text-white flex items-center justify-center shrink-0">
+                      <Star className="w-3.5 h-3.5 fill-white" />
+                    </div>
+                    <PlayerAvatar
+                      name={starOfTheNight.playerName}
+                      className="w-7 h-7 rounded-lg text-xs ring-1 ring-pink-400/60"
+                    />
+                    <div className="truncate flex-1">
+                      <span className="text-[9px] text-pink-300 font-black uppercase block">
+                        Star of Night
+                      </span>
+                      <span className="font-bold text-white block text-[11px] truncate">
+                        {starOfTheNight.playerName}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

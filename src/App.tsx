@@ -15,7 +15,8 @@ import { ScoreModal } from './components/ScoreModal';
 import { CreateGameSessionModal } from './components/CreateGameSessionModal';
 import { ImportNextGamesModal } from './components/ImportNextGamesModal';
 import { ManagePlayersModal } from './components/ManagePlayersModal';
-import { PadelGame, SignUpOption } from './types/padel';
+import { TasksModal } from './components/TasksModal';
+import { PadelGame, RecordedMatch, SignUpOption } from './types/padel';
 
 export function App() {
   const {
@@ -26,6 +27,7 @@ export function App() {
     weeklyAwards,
     members,
     nextGameSession,
+    starOfTheNight,
     currentPlayer,
     setCurrentPlayerId,
     userSignUpPlans,
@@ -46,6 +48,8 @@ export function App() {
     leaveGameSlot,
     createGame,
     recordMatchScore,
+    updateRecordedMatch,
+    deleteRecordedMatch,
     saveNextGameSession,
     importNextGameSession,
     updateFixtureDraftScore,
@@ -53,8 +57,9 @@ export function App() {
     recordSingleFixture,
     recordAllScoredFixtures,
     updateRecordedSessionDate,
+    updateStarOfTheNight,
     getLeagueStandings,
-    getMostImprovedPlayer,
+    getWeeklyMvp,
     resetToDefaults,
   } = usePadelState();
 
@@ -80,10 +85,12 @@ export function App() {
   const [signUpOptionDefault, setSignUpOptionDefault] = useState<SignUpOption>('both');
   const [isScoreModalOpen, setIsScoreModalOpen] = useState(false);
   const [selectedGameForScore, setSelectedGameForScore] = useState<PadelGame | null>(null);
+  const [editingMatchForScore, setEditingMatchForScore] = useState<RecordedMatch | null>(null);
   const [isCreateSessionOpen, setIsCreateSessionOpen] = useState(false);
   const [isImportNextGamesOpen, setIsImportNextGamesOpen] = useState(false);
   const [importDefaultCreateBookings, setImportDefaultCreateBookings] = useState(false);
   const [isManagePlayersOpen, setIsManagePlayersOpen] = useState(false);
+  const [isTasksOpen, setIsTasksOpen] = useState(false);
 
   const openImportModal = (createBookingsByDefault = false) => {
     setImportDefaultCreateBookings(createBookingsByDefault);
@@ -91,7 +98,7 @@ export function App() {
   };
 
   const standings = getLeagueStandings(activeLeagueId);
-  const mostImproved = getMostImprovedPlayer();
+  const weeklyMvp = getWeeklyMvp(activeLeagueId);
 
   const handleOpenSignUpOptions = (defaultChoice: SignUpOption = 'both') => {
     setSignUpOptionDefault(defaultChoice);
@@ -99,6 +106,7 @@ export function App() {
   };
 
   const handleOpenRecordScore = (gameOrLeagueId?: PadelGame | string) => {
+    setEditingMatchForScore(null);
     if (typeof gameOrLeagueId === 'string') {
       setActiveLeagueId(gameOrLeagueId);
       setSelectedGameForScore(null);
@@ -113,6 +121,23 @@ export function App() {
     setIsScoreModalOpen(true);
   };
 
+  const handleOpenEditMatch = (match: RecordedMatch) => {
+    setSelectedGameForScore(null);
+    setEditingMatchForScore(match);
+    if (match.leagueId) {
+      setActiveLeagueId(match.leagueId);
+    }
+    setIsScoreModalOpen(true);
+  };
+
+  const handleQuickUpdateRecordedScore = (
+    matchId: string,
+    teamAPointsWon: number,
+    teamBPointsWon: number
+  ) => {
+    updateRecordedMatch(matchId, { teamAPointsWon, teamBPointsWon });
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'home':
@@ -124,6 +149,8 @@ export function App() {
               onNavigateToMembers={() => handleSelectTab('members')}
               onOpenRecordScore={() => handleOpenRecordScore(activeLeagueId)}
               topStandings={standings}
+              weeklyMvp={weeklyMvp}
+              starOfTheNight={starOfTheNight}
               activeGames={games}
             />
 
@@ -132,7 +159,11 @@ export function App() {
                 leagues={leagues}
                 activeLeagueId={activeLeagueId}
                 onSelectLeague={setActiveLeagueId}
+                players={players}
                 standings={standings}
+                weeklyMvp={weeklyMvp}
+                starOfTheNight={starOfTheNight}
+                onUpdateStarOfTheNight={updateStarOfTheNight}
                 matches={matches}
                 currentPlayer={currentPlayer}
                 nextGameSession={nextGameSession}
@@ -140,6 +171,7 @@ export function App() {
                 onOpenCreateGameSession={() => setIsCreateSessionOpen(true)}
                 onOpenImportNextGames={() => openImportModal(false)}
                 onOpenManagePlayers={() => setIsManagePlayersOpen(true)}
+                onOpenTasks={() => setIsTasksOpen(true)}
                 onRenamePlayer={renamePlayer}
                 onUpdateFixtureDraftScore={updateFixtureDraftScore}
                 onUpdateNextSessionDate={updateNextSessionDate}
@@ -158,6 +190,7 @@ export function App() {
         return (
           <GamesView
             games={games}
+            matches={matches}
             players={players}
             currentPlayer={currentPlayer}
             onJoinSlot={joinGameSlot}
@@ -177,7 +210,11 @@ export function App() {
             leagues={leagues}
             activeLeagueId={activeLeagueId}
             onSelectLeague={setActiveLeagueId}
+            players={players}
             standings={standings}
+            weeklyMvp={weeklyMvp}
+            starOfTheNight={starOfTheNight}
+            onUpdateStarOfTheNight={updateStarOfTheNight}
             matches={matches}
             currentPlayer={currentPlayer}
             nextGameSession={nextGameSession}
@@ -185,6 +222,7 @@ export function App() {
             onOpenCreateGameSession={() => setIsCreateSessionOpen(true)}
             onOpenImportNextGames={() => openImportModal(false)}
             onOpenManagePlayers={() => setIsManagePlayersOpen(true)}
+            onOpenTasks={() => setIsTasksOpen(true)}
             onRenamePlayer={renamePlayer}
             onUpdateFixtureDraftScore={updateFixtureDraftScore}
             onUpdateNextSessionDate={updateNextSessionDate}
@@ -211,7 +249,11 @@ export function App() {
       case 'improved':
         return (
           <MostImprovedView
-            mostImprovedData={mostImproved}
+            weeklyMvp={weeklyMvp}
+            starOfTheNight={starOfTheNight}
+            players={players}
+            currentPlayer={currentPlayer}
+            onUpdateStarOfTheNight={updateStarOfTheNight}
             historicalAwards={weeklyAwards}
           />
         );
@@ -240,6 +282,7 @@ export function App() {
         onSelectPlayer={setCurrentPlayerId}
         onOpenSignUp={() => setIsSignUpOpen(true)}
         onOpenMembers={() => setIsManagePlayersOpen(true)}
+        onOpenTasks={() => setIsTasksOpen(true)}
         onGoHome={handleGoHome}
         viewMode={viewMode}
         onToggleViewMode={setViewMode}
@@ -282,7 +325,7 @@ export function App() {
           <div className="flex items-center gap-4 text-slate-400">
             <span>History-Smart Random Teams</span>
             <span>•</span>
-            <span>Top 3 Rankings & Full League</span>
+            <span>Leader, Weekly MVP & Star of the Night</span>
             <span>•</span>
             <span>Voice & One-Tap Score Input</span>
           </div>
@@ -328,6 +371,20 @@ export function App() {
         }}
       />
 
+      {/* Tasks Modal (Tasks -> Scores -> Edit: search player & edit game scores) */}
+      <TasksModal
+        isOpen={isTasksOpen}
+        onClose={() => setIsTasksOpen(false)}
+        players={players}
+        matches={matches}
+        weightedScoring={weightedScoringEnabled}
+        onQuickUpdateScore={handleQuickUpdateRecordedScore}
+        onOpenFullEditMatch={handleOpenEditMatch}
+        onOpenAddScore={() => handleOpenRecordScore(activeLeagueId)}
+        onOpenManagePlayers={() => setIsManagePlayersOpen(true)}
+        onOpenImportNextGames={() => openImportModal(false)}
+      />
+
       {/* Manage Players (Add / Edit / Remove Players) Modal */}
       <ManagePlayersModal
         isOpen={isManagePlayersOpen}
@@ -356,13 +413,14 @@ export function App() {
         onConfirmSignUp={(option, notes) => selectSignUpOption(option, currentPlayer.id, notes)}
       />
 
-      {/* Easy & Voice Match Score Modal */}
+      {/* Easy & Voice Match Score Modal (Add or Edit Any Match Score) */}
       <ScoreModal
-        key={`${activeLeagueId}-${selectedGameForScore?.id || 'manual'}`}
+        key={`${activeLeagueId}-${selectedGameForScore?.id || editingMatchForScore?.id || 'manual'}`}
         isOpen={isScoreModalOpen}
         onClose={() => {
           setIsScoreModalOpen(false);
           setSelectedGameForScore(null);
+          setEditingMatchForScore(null);
         }}
         leagues={leagues}
         players={players}
@@ -371,7 +429,10 @@ export function App() {
         preselectedLeagueId={activeLeagueId}
         preselectedGameId={selectedGameForScore?.id}
         preselectedPlayers={selectedGameForScore?.players}
+        editingMatch={editingMatchForScore}
         onRecordScore={recordMatchScore}
+        onUpdateScore={updateRecordedMatch}
+        onDeleteMatch={deleteRecordedMatch}
       />
     </div>
   );

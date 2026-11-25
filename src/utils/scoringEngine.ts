@@ -1,4 +1,27 @@
-import { Player, ScoreBreakdown } from '../types/padel';
+import { Player, RecordedMatch, ScoreBreakdown } from '../types/padel';
+
+export function sortMatchesChronologically(matches: RecordedMatch[]): RecordedMatch[] {
+  return matches
+    .map((m, index) => {
+      let sortDate = m.date || '';
+      if (!sortDate) {
+        const tsMatch = /^match-(\d{13})/.exec(m.id);
+        if (tsMatch) {
+          sortDate = new Date(Number(tsMatch[1])).toISOString().split('T')[0];
+        } else {
+          sortDate = '0000-00-00';
+        }
+      }
+      return { m, sortDate, index };
+    })
+    .sort((a, b) => {
+      if (a.sortDate !== b.sortDate) {
+        return a.sortDate.localeCompare(b.sortDate);
+      }
+      return a.index - b.index;
+    })
+    .map((item) => item.m);
+}
 
 export interface CalculateMatchPointsParams {
   teamAPlayer1: Player;

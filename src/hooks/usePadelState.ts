@@ -11,6 +11,9 @@ import {
   SignUpOption,
   MemberStatus,
   NextGameSession,
+  StarOfTheNight,
+  WeeklyMvpResult,
+  WeeklyMvpStanding,
 } from '../types/padel';
 import {
   INITIAL_PLAYERS,
@@ -19,8 +22,9 @@ import {
   INITIAL_RECORDED_MATCHES,
   INITIAL_WEEKLY_AWARDS,
   INITIAL_MEMBERS,
+  INITIAL_STAR_OF_THE_NIGHT,
 } from '../utils/initialData';
-import { calculateMatchScoring } from '../utils/scoringEngine';
+import { calculateMatchScoring, sortMatchesChronologically } from '../utils/scoringEngine';
 
 const STORAGE_KEYS = {
   PLAYERS: 'playslay_players_v6',
@@ -34,6 +38,9 @@ const STORAGE_KEYS = {
   WEIGHTED_SCORING: 'playslay_weighted_scoring_v6',
   SIGNUP_PLANS: 'padelslay_signup_plans_v6',
   NEXT_SESSION: 'playslay_next_session_v6',
+  STAR_OF_NIGHT: 'playslay_star_of_night_v6',
+  LOCAL_UPDATED_AT: 'playslay_local_updated_at_v6',
+  PENDING_CLOUD_SYNC: 'playslay_pending_sync_v6',
 };
 
 const DEFAULT_ACTIVE_PLAYER_ID = 'p-olive';
@@ -56,6 +63,7 @@ interface PersistedCloudState {
   weeklyAwards: WeeklyAward[];
   members: InterestedMember[];
   nextGameSession: NextGameSession | null;
+  starOfTheNight?: StarOfTheNight;
   userSignUpPlans: { [playerId: string]: SignUpOption };
   weightedScoringEnabled: boolean;
 }
@@ -101,6 +109,21 @@ export function usePadelState() {
     }
   });
 
+  const [starOfTheNight, setStarOfTheNight] = useState<StarOfTheNight>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.STAR_OF_NIGHT);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.playerId === 'string') {
+          return parsed;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return INITIAL_STAR_OF_THE_NIGHT;
+  });
+
   const [currentPlayerId, setCurrentPlayerId] = useState<string>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.CURRENT_PLAYER_ID);
     return (
@@ -130,10 +153,23 @@ export function usePadelState() {
   });
 
   const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatus>('loading');
+  const prevSyncedDepsRef = useRef({
+    players,
+    games,
+    leagues,
+    matches,
+    weeklyAwards,
+    members,
+    nextGameSession,
+    starOfTheNight,
+    userSignUpPlans,
+    weightedScoringEnabled,
+  });
   const hasHydratedFromCloudRef = useRef(false);
   const skipNextCloudPushRef = useRef(false);
   const pendingCloudSaveRef = useRef(false);
   const lastServerUpdatedAtRef = useRef(0);
+  const localMutationAtRef = useRef(0);
   const latestStateSnapshotRef = useRef<PersistedCloudState>({
     players,
     games,
@@ -142,6 +178,7 @@ export function usePadelState() {
     weeklyAwards,
     members,
     nextGameSession,
+    starOfTheNight,
     userSignUpPlans,
     weightedScoringEnabled,
   });
@@ -155,6 +192,7 @@ export function usePadelState() {
       weeklyAwards,
       members,
       nextGameSession,
+      starOfTheNight,
       userSignUpPlans,
       weightedScoringEnabled,
     };
@@ -166,6 +204,7 @@ export function usePadelState() {
     weeklyAwards,
     members,
     nextGameSession,
+    starOfTheNight,
     userSignUpPlans,
     weightedScoringEnabled,
   ]);
@@ -191,11 +230,53 @@ export function usePadelState() {
       setMembers(remote.members);
     }
     setNextGameSession(remote.nextGameSession ?? null);
+    if (remote.starOfTheNight && typeof remote.starOfTheNight.playerId === 'string') {
+      setStarOfTheNight(remote.starOfTheNight);
+    }
     if (remote.userSignUpPlans && typeof remote.userSignUpPlans === 'object') {
       setUserSignUpPlans(remote.userSignUpPlans);
     }
     if (typeof remote.weightedScoringEnabled === 'boolean') {
       setWeightedScoringEnabled(remote.weightedScoringEnabled);
+    }
+  };
+
+  const pushSnapshotToCloud = async (snapshot: PersistedCloudState, mutationTs: number) => {
+    pendingCloudSaveRef.current = true;
+    setCloudSyncStatus('saving');
+
+    // Note: Do NOT set `keepalive: true` here — browsers enforce a strict 64 KiB body limit
+    // on keepalive fetches, which silently rejects larger league state payloads (>64 KB)!
+    const sendPut = async () => {
+      const res = await fetch('/api/state', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: snapshot }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    };
+
+    try {
+      let data;
+      try {
+        data = await sendPut();
+      } catch {
+        // Retry once on transient network hiccup
+        await new Promise((r) => window.setTimeout(r, 800));
+        data = await sendPut();
+      }
+      const serverTs = Number(data?.updatedAt || Date.now());
+      lastServerUpdatedAtRef.current = serverTs;
+      if (localMutationAtRef.current <= mutationTs) {
+        localStorage.setItem(STORAGE_KEYS.PENDING_CLOUD_SYNC, 'false');
+        localStorage.setItem(STORAGE_KEYS.LOCAL_UPDATED_AT, String(serverTs));
+        pendingCloudSaveRef.current = false;
+        setCloudSyncStatus('synced');
+      }
+    } catch {
+      pendingCloudSaveRef.current = false;
+      setCloudSyncStatus('offline');
     }
   };
 
@@ -210,29 +291,40 @@ export function usePadelState() {
         const payload = await res.json();
         if (cancelled) return;
 
+        const remoteUpdatedAt = Number(payload?.updatedAt || 0);
+        const pendingLocalSync =
+          localStorage.getItem(STORAGE_KEYS.PENDING_CLOUD_SYNC) === 'true';
+        const localUpdatedAt = Number(
+          localStorage.getItem(STORAGE_KEYS.LOCAL_UPDATED_AT) || 0
+        );
+
         if (payload?.state && Array.isArray(payload.state.players)) {
-          lastServerUpdatedAtRef.current = Number(payload.updatedAt || Date.now());
-          applyRemoteSnapshot(payload.state as PersistedCloudState);
-          hasHydratedFromCloudRef.current = true;
-          setCloudSyncStatus('synced');
+          // If local state has unsynced edits newer than the server (e.g. user refreshed
+          // immediately after saving), keep local state and push it to Cloud Storage!
+          if (
+            (pendingLocalSync && localUpdatedAt >= remoteUpdatedAt) ||
+            localMutationAtRef.current > 0
+          ) {
+            hasHydratedFromCloudRef.current = true;
+            await pushSnapshotToCloud(
+              latestStateSnapshotRef.current,
+              localMutationAtRef.current || localUpdatedAt || Date.now()
+            );
+          } else {
+            lastServerUpdatedAtRef.current = remoteUpdatedAt || Date.now();
+            localStorage.setItem(
+              STORAGE_KEYS.LOCAL_UPDATED_AT,
+              String(lastServerUpdatedAtRef.current)
+            );
+            localStorage.setItem(STORAGE_KEYS.PENDING_CLOUD_SYNC, 'false');
+            applyRemoteSnapshot(payload.state as PersistedCloudState);
+            hasHydratedFromCloudRef.current = true;
+            setCloudSyncStatus('synced');
+          }
         } else {
           // First run: seed the GCS bucket with the current state (preserving any local edits)
-          const seedRes = await fetch('/api/state', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            keepalive: true,
-            body: JSON.stringify({ state: latestStateSnapshotRef.current }),
-          });
-          if (!cancelled) {
-            if (seedRes.ok) {
-              const seedJson = await seedRes.json();
-              lastServerUpdatedAtRef.current = Number(seedJson.updatedAt || Date.now());
-              setCloudSyncStatus('synced');
-            } else {
-              setCloudSyncStatus('offline');
-            }
-            hasHydratedFromCloudRef.current = true;
-          }
+          hasHydratedFromCloudRef.current = true;
+          await pushSnapshotToCloud(latestStateSnapshotRef.current, Date.now());
         }
       } catch {
         if (!cancelled) {
@@ -247,6 +339,7 @@ export function usePadelState() {
     // Refresh from Cloud Storage when switching back to the browser tab on mobile/desktop
     const refreshIfNewer = async () => {
       if (!hasHydratedFromCloudRef.current || pendingCloudSaveRef.current) return;
+      if (localStorage.getItem(STORAGE_KEYS.PENDING_CLOUD_SYNC) === 'true') return;
       if (document.visibilityState === 'hidden') return;
       try {
         const res = await fetch('/api/state', { cache: 'no-store' });
@@ -259,6 +352,8 @@ export function usePadelState() {
           remoteUpdatedAt > lastServerUpdatedAtRef.current
         ) {
           lastServerUpdatedAtRef.current = remoteUpdatedAt;
+          localStorage.setItem(STORAGE_KEYS.LOCAL_UPDATED_AT, String(remoteUpdatedAt));
+          localStorage.setItem(STORAGE_KEYS.PENDING_CLOUD_SYNC, 'false');
           applyRemoteSnapshot(payload.state as PersistedCloudState);
           setCloudSyncStatus('synced');
         }
@@ -276,11 +371,48 @@ export function usePadelState() {
     };
   }, []);
 
-  // Push every shared state change (player names, scores, dates, fixtures) to Cloud Storage
+  // Push every shared state change (player names, scores, dates, fixtures, Star of the Night) to Cloud Storage
   useEffect(() => {
-    if (!hasHydratedFromCloudRef.current) return;
+    const prev = prevSyncedDepsRef.current;
+    const hasStateChanged =
+      prev.players !== players ||
+      prev.games !== games ||
+      prev.leagues !== leagues ||
+      prev.matches !== matches ||
+      prev.weeklyAwards !== weeklyAwards ||
+      prev.members !== members ||
+      prev.nextGameSession !== nextGameSession ||
+      prev.starOfTheNight !== starOfTheNight ||
+      prev.userSignUpPlans !== userSignUpPlans ||
+      prev.weightedScoringEnabled !== weightedScoringEnabled;
+
+    prevSyncedDepsRef.current = {
+      players,
+      games,
+      leagues,
+      matches,
+      weeklyAwards,
+      members,
+      nextGameSession,
+      starOfTheNight,
+      userSignUpPlans,
+      weightedScoringEnabled,
+    };
+
+    if (!hasStateChanged) {
+      return;
+    }
     if (skipNextCloudPushRef.current) {
       skipNextCloudPushRef.current = false;
+      return;
+    }
+
+    const mutationTs = Date.now();
+    localMutationAtRef.current = mutationTs;
+    localStorage.setItem(STORAGE_KEYS.LOCAL_UPDATED_AT, String(mutationTs));
+    localStorage.setItem(STORAGE_KEYS.PENDING_CLOUD_SYNC, 'true');
+
+    if (!hasHydratedFromCloudRef.current) {
       return;
     }
 
@@ -295,28 +427,14 @@ export function usePadelState() {
       weeklyAwards,
       members,
       nextGameSession,
+      starOfTheNight,
       userSignUpPlans,
       weightedScoringEnabled,
     };
 
-    const timer = window.setTimeout(async () => {
-      try {
-        const res = await fetch('/api/state', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          keepalive: true,
-          body: JSON.stringify({ state: snapshot }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        lastServerUpdatedAtRef.current = Number(data?.updatedAt || Date.now());
-        pendingCloudSaveRef.current = false;
-        setCloudSyncStatus('synced');
-      } catch {
-        pendingCloudSaveRef.current = false;
-        setCloudSyncStatus('offline');
-      }
-    }, 200);
+    const timer = window.setTimeout(() => {
+      void pushSnapshotToCloud(snapshot, mutationTs);
+    }, 40);
 
     return () => window.clearTimeout(timer);
   }, [
@@ -327,11 +445,15 @@ export function usePadelState() {
     weeklyAwards,
     members,
     nextGameSession,
+    starOfTheNight,
     userSignUpPlans,
     weightedScoringEnabled,
   ]);
 
   // Persist states
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.STAR_OF_NIGHT, JSON.stringify(starOfTheNight));
+  }, [starOfTheNight]);
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SIGNUP_PLANS, JSON.stringify(userSignUpPlans));
   }, [userSignUpPlans]);
@@ -866,46 +988,102 @@ export function usePadelState() {
     };
   };
 
-  const applyMatchesToPlayers = (newMatchesList: RecordedMatch[]) => {
-    setPlayers((prev) => {
-      let current = [...prev];
-      for (const m of newMatchesList) {
-        current = current.map((player) => {
-          const isTeamA =
-            player.id === m.teamA.player1.id || player.id === m.teamA.player2.id;
-          const isTeamB =
-            player.id === m.teamB.player1.id || player.id === m.teamB.player2.id;
+  const syncPlayersFromMatches = (
+    playerList: Player[],
+    allMatches: RecordedMatch[],
+    useWeighting: boolean
+  ): Player[] => {
+    const ordered = sortMatchesChronologically(allMatches);
+    return playerList.map((player) => {
+      let played = 0;
+      let won = 0;
+      let lost = 0;
+      let pointsWon = 0;
+      let pointsLost = 0;
+      let currentStreak = 0;
+      let totalPointsGained = 0;
+      let rankDelta = 0;
 
-          if (!isTeamA && !isTeamB) return player;
+      for (const m of ordered) {
+        const isTeamA =
+          player.id === m.teamA.player1.id || player.id === m.teamA.player2.id;
+        const isTeamB =
+          player.id === m.teamB.player1.id || player.id === m.teamB.player2.id;
+        if (!isTeamA && !isTeamB) continue;
 
-          const isTie = m.winnerTeam === 'Tie';
-          const isWinner =
-            !isTie && ((isTeamA && m.winnerTeam === 'A') || (isTeamB && m.winnerTeam === 'B'));
-          const pointsAwarded = isTeamA
-            ? m.scoringBreakdown.totalTeamAPoints
-            : m.scoringBreakdown.totalTeamBPoints;
+        played += 1;
+        const myPts = isTeamA ? m.teamA.pointsWon : m.teamB.pointsWon;
+        const oppPts = isTeamA ? m.teamB.pointsWon : m.teamA.pointsWon;
+        pointsWon += myPts;
+        pointsLost += oppPts;
 
-          const rankGain = isTie ? 0.01 : isWinner ? 0.05 : -0.02;
-          const newScore = Math.max(
-            1.0,
-            Math.min(7.0, parseFloat((player.rankingScore + rankGain).toFixed(2)))
-          );
+        const breakdown = useWeighting
+          ? calculateMatchScoring({
+              teamAPlayer1: m.teamA.player1,
+              teamAPlayer2: m.teamA.player2,
+              teamBPlayer1: m.teamB.player1,
+              teamBPlayer2: m.teamB.player2,
+              teamAPointsWon: m.teamA.pointsWon,
+              teamBPointsWon: m.teamB.pointsWon,
+              winnerTeam: m.winnerTeam,
+              useWeighting: true,
+            })
+          : m.scoringBreakdown;
 
-          return {
-            ...player,
-            rankingScore: newScore,
-            matchesPlayed: player.matchesPlayed + 1,
-            matchesWon: isWinner ? player.matchesWon + 1 : player.matchesWon,
-            currentStreak: isWinner ? player.currentStreak + 1 : 0,
-            weeklyPointsGained: player.weeklyPointsGained + pointsAwarded,
-            weeklyRankDelta: parseFloat(
-              (player.weeklyRankDelta + (isWinner ? 0.08 : 0.01)).toFixed(2)
-            ),
-          };
-        });
+        const awarded = isTeamA
+          ? useWeighting
+            ? breakdown.totalTeamAPoints
+            : m.teamA.pointsWon
+          : useWeighting
+          ? breakdown.totalTeamBPoints
+          : m.teamB.pointsWon;
+
+        totalPointsGained += awarded;
+
+        const isTie = m.winnerTeam === 'Tie';
+        const isWinner =
+          !isTie && ((isTeamA && m.winnerTeam === 'A') || (isTeamB && m.winnerTeam === 'B'));
+
+        if (isWinner) {
+          won += 1;
+          currentStreak += 1;
+          rankDelta += 0.05;
+        } else if (isTie) {
+          currentStreak = 0;
+          rankDelta += 0.01;
+        } else {
+          lost += 1;
+          currentStreak = 0;
+        }
       }
-      return current;
+
+      const diff = pointsWon - pointsLost;
+      const autoRecordPattern = /^\d+W\s*-\s*\d+L/i;
+      const nextRankingText =
+        played > 0 && autoRecordPattern.test(player.rankingText)
+          ? `${won}W - ${lost}L • ${diff >= 0 ? `+${diff}` : diff} Diff`
+          : player.rankingText;
+
+      return {
+        ...player,
+        rankingText: nextRankingText,
+        matchesPlayed: played,
+        matchesWon: won,
+        currentStreak,
+        weeklyPointsGained: totalPointsGained,
+        weeklyRankDelta: parseFloat(rankDelta.toFixed(2)),
+      };
     });
+  };
+
+  const ensureLeaguePlayersRegistered = (leagueId: string, playerIds: string[]) => {
+    setLeagues((prev) =>
+      prev.map((l) => {
+        if (l.id !== leagueId) return l;
+        const merged = Array.from(new Set([...l.registeredPlayerIds, ...playerIds]));
+        return { ...l, registeredPlayerIds: merged };
+      })
+    );
   };
 
   // Action: Record Match Score
@@ -929,24 +1107,18 @@ export function usePadelState() {
     winnerTeam: 'A' | 'B' | 'Tie';
   }) => {
     const newMatch = buildRecordedMatch(params);
+    const nextMatches = [...matches, newMatch];
 
-    setMatches((prev) => [...prev, newMatch]);
-    applyMatchesToPlayers([newMatch]);
+    setMatches(nextMatches);
+    setPlayers((prev) => syncPlayersFromMatches(prev, nextMatches, weightedScoringEnabled));
 
     // Ensure all 4 players are registered in this league
-    const matchPlayerIds = [
+    ensureLeaguePlayersRegistered(params.leagueId, [
       params.teamAPlayer1.id,
       params.teamAPlayer2.id,
       params.teamBPlayer1.id,
       params.teamBPlayer2.id,
-    ];
-    setLeagues((prev) =>
-      prev.map((l) => {
-        if (l.id !== params.leagueId) return l;
-        const merged = Array.from(new Set([...l.registeredPlayerIds, ...matchPlayerIds]));
-        return { ...l, registeredPlayerIds: merged };
-      })
-    );
+    ]);
 
     if (params.gameId) {
       setGames((prev) =>
@@ -956,6 +1128,150 @@ export function usePadelState() {
 
     triggerConfetti(95);
     return newMatch;
+  };
+
+  // Action: Edit / Update any existing Recorded Match Score or details
+  const updateRecordedMatch = (
+    matchId: string,
+    params: {
+      leagueId?: string;
+      gameId?: string;
+      date?: string;
+      round?: string;
+      timeSlot?: string;
+      courtName?: string;
+      teamAPlayer1?: Player;
+      teamAPlayer2?: Player;
+      teamBPlayer1?: Player;
+      teamBPlayer2?: Player;
+      setScores?: string[];
+      teamASetsWon?: number;
+      teamBSetsWon?: number;
+      teamAPointsWon: number;
+      teamBPointsWon: number;
+      winnerTeam?: 'A' | 'B' | 'Tie';
+    }
+  ) => {
+    const existing = matches.find((m) => m.id === matchId);
+    if (!existing) return null;
+
+    const pA1 = params.teamAPlayer1 || existing.teamA.player1;
+    const pA2 = params.teamAPlayer2 || existing.teamA.player2;
+    const pB1 = params.teamBPlayer1 || existing.teamB.player1;
+    const pB2 = params.teamBPlayer2 || existing.teamB.player2;
+
+    const ptsA = Math.max(0, params.teamAPointsWon);
+    const ptsB = Math.max(0, params.teamBPointsWon);
+
+    const winnerTeam: 'A' | 'B' | 'Tie' =
+      params.winnerTeam ?? (ptsA > ptsB ? 'A' : ptsB > ptsA ? 'B' : 'Tie');
+    const setsA = params.teamASetsWon ?? (winnerTeam === 'A' ? 1 : 0);
+    const setsB = params.teamBSetsWon ?? (winnerTeam === 'B' ? 1 : 0);
+    const setScores = params.setScores ?? [`${ptsA}-${ptsB}`];
+    const targetLeagueId = params.leagueId ?? existing.leagueId;
+
+    const breakdown = calculateMatchScoring({
+      teamAPlayer1: pA1,
+      teamAPlayer2: pA2,
+      teamBPlayer1: pB1,
+      teamBPlayer2: pB2,
+      teamAPointsWon: ptsA,
+      teamBPointsWon: ptsB,
+      winnerTeam,
+      useWeighting: weightedScoringEnabled,
+    });
+
+    const updatedMatch: RecordedMatch = {
+      ...existing,
+      leagueId: targetLeagueId,
+      gameId: params.gameId !== undefined ? params.gameId : existing.gameId,
+      date: params.date !== undefined ? params.date : existing.date,
+      round: params.round !== undefined ? params.round : existing.round,
+      timeSlot: params.timeSlot !== undefined ? params.timeSlot : existing.timeSlot,
+      courtName: params.courtName !== undefined ? params.courtName : existing.courtName,
+      teamA: {
+        player1: pA1,
+        player2: pA2,
+        setsWon: setsA,
+        pointsWon: ptsA,
+      },
+      teamB: {
+        player1: pB1,
+        player2: pB2,
+        setsWon: setsB,
+        pointsWon: ptsB,
+      },
+      setScores,
+      winnerTeam,
+      weightedBonusApplied: weightedScoringEnabled,
+      scoringBreakdown: breakdown,
+    };
+
+    const nextMatches = matches.map((m) => (m.id === matchId ? updatedMatch : m));
+    setMatches(nextMatches);
+    setPlayers((prev) => syncPlayersFromMatches(prev, nextMatches, weightedScoringEnabled));
+
+    ensureLeaguePlayersRegistered(targetLeagueId, [pA1.id, pA2.id, pB1.id, pB2.id]);
+
+    // Keep any linked Next Games fixture synchronized with the edited score/teams
+    setNextGameSession((prev) => {
+      if (!prev) return prev;
+      const hasLinked = prev.fixtures.some((f) => f.recordedMatchId === matchId);
+      if (!hasLinked) return prev;
+      return {
+        ...prev,
+        fixtures: prev.fixtures.map((f) =>
+          f.recordedMatchId === matchId
+            ? {
+                ...f,
+                courtName: updatedMatch.courtName,
+                teamA: { player1: pA1, player2: pA2 },
+                teamB: { player1: pB1, player2: pB2 },
+                teamAScore: ptsA,
+                teamBScore: ptsB,
+                completed: true,
+              }
+            : f
+        ),
+      };
+    });
+
+    triggerConfetti(55);
+    return updatedMatch;
+  };
+
+  // Action: Delete a recorded match score and recalculate standings
+  const deleteRecordedMatch = (matchId: string) => {
+    const existing = matches.find((m) => m.id === matchId);
+    if (!existing) return;
+
+    const nextMatches = matches.filter((m) => m.id !== matchId);
+    setMatches(nextMatches);
+    setPlayers((prev) => syncPlayersFromMatches(prev, nextMatches, weightedScoringEnabled));
+
+    setNextGameSession((prev) => {
+      if (!prev) return prev;
+      const hasLinked = prev.fixtures.some((f) => f.recordedMatchId === matchId);
+      if (!hasLinked) return prev;
+      return {
+        ...prev,
+        fixtures: prev.fixtures.map((f) =>
+          f.recordedMatchId === matchId
+            ? { ...f, completed: false, recordedMatchId: undefined }
+            : f
+        ),
+      };
+    });
+
+    if (existing.gameId) {
+      setGames((prev) =>
+        prev.map((g) => {
+          if (g.id !== existing.gameId) return g;
+          const filled = Object.values(g.players).filter(Boolean).length;
+          return { ...g, status: filled >= 4 ? 'full' : 'open' };
+        })
+      );
+    }
   };
 
   // Action: Save newly generated 20-min Next Games session
@@ -1104,18 +1420,36 @@ export function usePadelState() {
     });
   };
 
-  // Action: Record a single fixture from Next Games into League Standings & Last Games
+  // Action: Record or update a single fixture from Next Games into League Standings & Last Games
   const recordSingleFixture = (
     fixtureId: string,
     overrideScores?: { teamAScore: number; teamBScore: number }
   ) => {
     if (!nextGameSession) return null;
     const fix = nextGameSession.fixtures.find((f) => f.id === fixtureId);
-    if (!fix || fix.completed) return null;
+    if (!fix) return null;
 
     const sA = overrideScores ? overrideScores.teamAScore : fix.teamAScore;
     const sB = overrideScores ? overrideScores.teamBScore : fix.teamBScore;
     if (sA === undefined || sB === undefined) return null;
+
+    // If this fixture was already recorded, update the existing RecordedMatch in-place!
+    if (fix.completed && fix.recordedMatchId && matches.some((m) => m.id === fix.recordedMatchId)) {
+      return updateRecordedMatch(fix.recordedMatchId, {
+        leagueId: fix.leagueId,
+        date: nextGameSession.date,
+        round: fix.roundLabel,
+        timeSlot: fix.timeSlot,
+        courtName: fix.courtName,
+        teamAPlayer1: fix.teamA.player1,
+        teamAPlayer2: fix.teamA.player2,
+        teamBPlayer1: fix.teamB.player1,
+        teamBPlayer2: fix.teamB.player2,
+        setScores: [`${sA}-${sB}`],
+        teamAPointsWon: sA,
+        teamBPointsWon: sB,
+      });
+    }
 
     const winnerTeam: 'A' | 'B' | 'Tie' = sA > sB ? 'A' : sB > sA ? 'B' : 'Tie';
     const recorded = buildRecordedMatch({
@@ -1138,8 +1472,15 @@ export function usePadelState() {
       winnerTeam,
     });
 
-    setMatches((prev) => [...prev, recorded]);
-    applyMatchesToPlayers([recorded]);
+    const nextMatches = [...matches, recorded];
+    setMatches(nextMatches);
+    setPlayers((prev) => syncPlayersFromMatches(prev, nextMatches, weightedScoringEnabled));
+    ensureLeaguePlayersRegistered(fix.leagueId, [
+      fix.teamA.player1.id,
+      fix.teamA.player2.id,
+      fix.teamB.player1.id,
+      fix.teamB.player2.id,
+    ]);
 
     setNextGameSession((prev) => {
       if (!prev) return prev;
@@ -1197,12 +1538,21 @@ export function usePadelState() {
     });
 
     const recordedById = new Map<string, string>();
+    const allPlayerIds: string[] = [];
     readyFixtures.forEach((f, idx) => {
       recordedById.set(f.id, newRecordedMatches[idx].id);
+      allPlayerIds.push(
+        f.teamA.player1.id,
+        f.teamA.player2.id,
+        f.teamB.player1.id,
+        f.teamB.player2.id
+      );
     });
 
-    setMatches((prev) => [...prev, ...newRecordedMatches]);
-    applyMatchesToPlayers(newRecordedMatches);
+    const nextMatches = [...matches, ...newRecordedMatches];
+    setMatches(nextMatches);
+    setPlayers((prev) => syncPlayersFromMatches(prev, nextMatches, weightedScoringEnabled));
+    ensureLeaguePlayersRegistered(nextGameSession.leagueId, allPlayerIds);
 
     setNextGameSession((prev) => {
       if (!prev) return prev;
@@ -1278,32 +1628,59 @@ export function usePadelState() {
       }
     });
 
-    const leagueMatches = matches
-      .filter((m) => m.leagueId === leagueId)
-      .slice()
-      .sort((a, b) => {
-        const dA = a.date || '';
-        const dB = b.date || '';
-        if (dA && dB && dA !== dB) return dA.localeCompare(dB);
-        return 0;
-      });
+    const leagueMatches = sortMatchesChronologically(
+      matches.filter((m) => m.leagueId === leagueId)
+    );
 
-    // Rolling form tracks ONLY the last recorded set (session) of games
-    const lastMatch = leagueMatches[leagueMatches.length - 1];
-    const latestSessionKey = lastMatch
-      ? lastMatch.sessionId || lastMatch.date || 'session-spreadsheet-1'
-      : null;
+    // Ensure any active player who has played in a recorded match for this league is included
+    leagueMatches.forEach((m) => {
+      [
+        m.teamA.player1.id,
+        m.teamA.player2.id,
+        m.teamB.player1.id,
+        m.teamB.player2.id,
+      ].forEach((pid) => {
+        if (!standingsMap.has(pid)) {
+          const p = activePlayersMap.get(pid);
+          if (p) {
+            standingsMap.set(pid, {
+              player: p,
+              played: 0,
+              won: 0,
+              lost: 0,
+              drawn: 0,
+              pointsWon: 0,
+              pointsLost: 0,
+              leaguePoints: 0,
+              form: [],
+              streak: 0,
+            });
+          }
+        }
+      });
+    });
 
     leagueMatches.forEach((m) => {
-      const mSessionKey = m.sessionId || m.date || 'session-spreadsheet-1';
-      const isLatestSession = latestSessionKey !== null && mSessionKey === latestSessionKey;
       const teamAPlayerIds = [m.teamA.player1.id, m.teamA.player2.id];
       const teamBPlayerIds = [m.teamB.player1.id, m.teamB.player2.id];
+      const dynamicBreakdown = weightedScoringEnabled
+        ? calculateMatchScoring({
+            teamAPlayer1: m.teamA.player1,
+            teamAPlayer2: m.teamA.player2,
+            teamBPlayer1: m.teamB.player1,
+            teamBPlayer2: m.teamB.player2,
+            teamAPointsWon: m.teamA.pointsWon,
+            teamBPointsWon: m.teamB.pointsWon,
+            winnerTeam: m.winnerTeam,
+            useWeighting: true,
+          })
+        : m.scoringBreakdown;
+
       const ptsA = weightedScoringEnabled
-        ? m.scoringBreakdown.totalTeamAPoints
+        ? dynamicBreakdown.totalTeamAPoints
         : m.teamA.pointsWon;
       const ptsB = weightedScoringEnabled
-        ? m.scoringBreakdown.totalTeamBPoints
+        ? dynamicBreakdown.totalTeamBPoints
         : m.teamB.pointsWon;
 
       teamAPlayerIds.forEach((pid) => {
@@ -1317,15 +1694,15 @@ export function usePadelState() {
 
         if (m.winnerTeam === 'A') {
           entry.won += 1;
-          if (isLatestSession) entry.form.push('W');
+          entry.form.push('W');
           entry.streak = entry.streak >= 0 ? entry.streak + 1 : 1;
         } else if (m.winnerTeam === 'B') {
           entry.lost += 1;
-          if (isLatestSession) entry.form.push('L');
+          entry.form.push('L');
           entry.streak = entry.streak <= 0 ? entry.streak - 1 : -1;
         } else {
           entry.drawn += 1;
-          if (isLatestSession) entry.form.push('D');
+          entry.form.push('D');
           entry.streak = 0;
         }
       });
@@ -1341,15 +1718,15 @@ export function usePadelState() {
 
         if (m.winnerTeam === 'B') {
           entry.won += 1;
-          if (isLatestSession) entry.form.push('W');
+          entry.form.push('W');
           entry.streak = entry.streak >= 0 ? entry.streak + 1 : 1;
         } else if (m.winnerTeam === 'A') {
           entry.lost += 1;
-          if (isLatestSession) entry.form.push('L');
+          entry.form.push('L');
           entry.streak = entry.streak <= 0 ? entry.streak - 1 : -1;
         } else {
           entry.drawn += 1;
-          if (isLatestSession) entry.form.push('D');
+          entry.form.push('D');
           entry.streak = 0;
         }
       });
@@ -1366,7 +1743,7 @@ export function usePadelState() {
       pointsLost: val.pointsLost,
       pointDiff: val.pointsWon - val.pointsLost,
       leaguePoints: val.leaguePoints,
-      form: val.form,
+      form: val.form.slice(-4),
       streak: val.streak,
       rank: 1,
     }));
@@ -1384,30 +1761,195 @@ export function usePadelState() {
     }));
   };
 
-  const getMostImprovedPlayer = () => {
-    const sorted = [...players].sort((a, b) => {
-      const scoreA = a.weeklyPointsGained * 0.7 + a.weeklyRankDelta * 150;
-      const scoreB = b.weeklyPointsGained * 0.7 + b.weeklyRankDelta * 150;
-      return scoreB - scoreA;
+  // Evaluate MVP of the Week based on the Last 4 Games from Last Games (current week's latest session)
+  const getWeeklyMvp = (leagueId: string): WeeklyMvpResult => {
+    const activePlayersMap = new Map<string, Player>();
+    players.forEach((p) => activePlayersMap.set(p.id, p));
+
+    const leagueMatches = sortMatchesChronologically(
+      matches.filter((m) => m.leagueId === leagueId)
+    );
+
+    const getSessionKey = (m: RecordedMatch) =>
+      m.date ? `date:${m.date}` : m.sessionId || 'session-spreadsheet-1';
+
+    const lastMatch = leagueMatches[leagueMatches.length - 1];
+    const latestKey = lastMatch ? getSessionKey(lastMatch) : null;
+    const latestSessionMatches = latestKey
+      ? leagueMatches.filter((m) => getSessionKey(m) === latestKey)
+      : [];
+
+    // Use the latest session ("Last Games") when it has a round of matches, evaluating up to each player's last 4 games
+    const useLatestSessionOnly =
+      latestSessionMatches.length >= 3 || leagueMatches.length <= 4;
+    const sourceMatches = useLatestSessionOnly ? latestSessionMatches : leagueMatches;
+
+    let sessionLabel = 'Last 4 Games';
+    if (useLatestSessionOnly && latestSessionMatches.length > 0) {
+      const rawDate = latestSessionMatches[0].date;
+      if (rawDate) {
+        const parsed = new Date(`${rawDate}T00:00:00`);
+        sessionLabel = !Number.isNaN(parsed.getTime())
+          ? parsed.toLocaleDateString('en-GB', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            })
+          : rawDate;
+      } else {
+        sessionLabel = 'Last Games Session';
+      }
+    }
+
+    const matchesByPlayer = new Map<string, RecordedMatch[]>();
+    sourceMatches.forEach((m) => {
+      [
+        m.teamA.player1.id,
+        m.teamA.player2.id,
+        m.teamB.player1.id,
+        m.teamB.player2.id,
+      ].forEach((pid) => {
+        if (!activePlayersMap.has(pid)) return;
+        const list = matchesByPlayer.get(pid) || [];
+        list.push(m);
+        matchesByPlayer.set(pid, list);
+      });
     });
 
-    const top = sorted[0] || players[0];
-    const winRate =
-      top.matchesPlayed > 0 ? Math.round((top.matchesWon / top.matchesPlayed) * 100) : 100;
+    const weeklyStandings: WeeklyMvpStanding[] = [];
+
+    matchesByPlayer.forEach((pMatches, pid) => {
+      const player = activePlayersMap.get(pid);
+      if (!player) return;
+
+      // Evaluate up to the player's last 4 games
+      const last4 = pMatches.slice(-4);
+      let weekPoints = 0;
+      let pointsWon = 0;
+      let pointsLost = 0;
+      let won = 0;
+      let lost = 0;
+      let drawn = 0;
+      const form: ('W' | 'L' | 'D')[] = [];
+
+      last4.forEach((m) => {
+        const isTeamA =
+          m.teamA.player1.id === pid || m.teamA.player2.id === pid;
+        const myPts = isTeamA ? m.teamA.pointsWon : m.teamB.pointsWon;
+        const oppPts = isTeamA ? m.teamB.pointsWon : m.teamA.pointsWon;
+
+        const dynBreakdown = weightedScoringEnabled
+          ? calculateMatchScoring({
+              teamAPlayer1: m.teamA.player1,
+              teamAPlayer2: m.teamA.player2,
+              teamBPlayer1: m.teamB.player1,
+              teamBPlayer2: m.teamB.player2,
+              teamAPointsWon: m.teamA.pointsWon,
+              teamBPointsWon: m.teamB.pointsWon,
+              winnerTeam: m.winnerTeam,
+              useWeighting: true,
+            })
+          : m.scoringBreakdown;
+
+        const awarded = weightedScoringEnabled
+          ? isTeamA
+            ? dynBreakdown.totalTeamAPoints
+            : dynBreakdown.totalTeamBPoints
+          : myPts;
+
+        weekPoints += awarded;
+        pointsWon += myPts;
+        pointsLost += oppPts;
+
+        if (m.winnerTeam === 'Tie') {
+          drawn += 1;
+          form.push('D');
+        } else if ((isTeamA && m.winnerTeam === 'A') || (!isTeamA && m.winnerTeam === 'B')) {
+          won += 1;
+          form.push('W');
+        } else {
+          lost += 1;
+          form.push('L');
+        }
+      });
+
+      const played = last4.length;
+      const pointDiff = pointsWon - pointsLost;
+      const winRate = played > 0 ? Math.round((won / played) * 100) : 0;
+
+      weeklyStandings.push({
+        player,
+        weekPoints,
+        pointsWon,
+        pointsLost,
+        pointDiff,
+        played,
+        won,
+        lost,
+        drawn,
+        winRate,
+        form,
+      });
+    });
+
+    weeklyStandings.sort((a, b) => {
+      if (b.weekPoints !== a.weekPoints) return b.weekPoints - a.weekPoints;
+      if (b.pointDiff !== a.pointDiff) return b.pointDiff - a.pointDiff;
+      if (b.won !== a.won) return b.won - a.won;
+      return b.pointsWon - a.pointsWon;
+    });
+
+    const winner: WeeklyMvpStanding = weeklyStandings[0] || {
+      player: players[0],
+      weekPoints: 0,
+      pointsWon: 0,
+      pointsLost: 0,
+      pointDiff: 0,
+      played: 0,
+      won: 0,
+      lost: 0,
+      drawn: 0,
+      winRate: 0,
+      form: [],
+    };
+
+    const diffLabel =
+      winner.pointDiff >= 0 ? `+${winner.pointDiff}` : `${winner.pointDiff}`;
 
     return {
-      player: top,
-      pointsGained: top.weeklyPointsGained,
-      rankDelta: top.weeklyRankDelta,
-      winRate,
-      streak: top.currentStreak,
-      commentary: `${top.name} leads TuesSlay with +${top.weeklyPointsGained} league points gained and a +${top.weeklyRankDelta} rating surge!`,
-      runnerUps: sorted.slice(1, 4).map((p) => ({
-        player: p,
-        pointsGained: p.weeklyPointsGained,
-        rankDelta: p.weeklyRankDelta,
-      })),
+      ...winner,
+      sessionLabel,
+      commentary:
+        winner.played > 0
+          ? `${winner.player.name} scored the best in Last Games (${winner.played} games) with ${winner.weekPoints} pts (${winner.won}W-${winner.lost}L, ${diffLabel} diff)!`
+          : 'Record match scores to crown this week’s MVP!',
+      runnerUps: weeklyStandings.slice(1, 5),
     };
+  };
+
+  // Action: Update Star of the Night (editable by Olive - fighting Irish)
+  const updateStarOfTheNight = (params: {
+    playerId: string;
+    reason: string;
+    nominatedBy?: string;
+  }) => {
+    const chosen = players.find((p) => p.id === params.playerId);
+    if (!chosen) return;
+
+    // Enforce permission: only Olive - fighting Irish can edit Star of the Night
+    const isOlive =
+      currentPlayer.id === 'p-olive' ||
+      currentPlayer.name.toLowerCase().includes('olive');
+    if (!isOlive) return;
+
+    setStarOfTheNight({
+      playerId: chosen.id,
+      playerName: chosen.name,
+      reason: params.reason.trim() || 'Star of the Night!',
+      nominatedBy: (params.nominatedBy || 'Folks who were there').trim(),
+      updatedAt: new Date().toISOString().split('T')[0],
+    });
+    triggerConfetti(80);
   };
 
   const resetToDefaults = () => {
@@ -1419,6 +1961,7 @@ export function usePadelState() {
     setWeeklyAwards(INITIAL_WEEKLY_AWARDS);
     setMembers(INITIAL_MEMBERS);
     setNextGameSession(null);
+    setStarOfTheNight(INITIAL_STAR_OF_THE_NIGHT);
     setCurrentPlayerId(
       INITIAL_PLAYERS.find((p) => p.id === DEFAULT_ACTIVE_PLAYER_ID)?.id ||
         INITIAL_PLAYERS[0].id
@@ -1436,6 +1979,7 @@ export function usePadelState() {
     weeklyAwards,
     members,
     nextGameSession,
+    starOfTheNight,
     currentPlayer,
     currentPlayerId,
     setCurrentPlayerId,
@@ -1458,6 +2002,8 @@ export function usePadelState() {
     createGame,
     registerForLeague,
     recordMatchScore,
+    updateRecordedMatch,
+    deleteRecordedMatch,
     saveNextGameSession,
     importNextGameSession,
     clearNextGameSession: () => setNextGameSession(null),
@@ -1466,8 +2012,9 @@ export function usePadelState() {
     recordSingleFixture,
     recordAllScoredFixtures,
     updateRecordedSessionDate,
+    updateStarOfTheNight,
     getLeagueStandings,
-    getMostImprovedPlayer,
+    getWeeklyMvp,
     resetToDefaults,
   };
 }

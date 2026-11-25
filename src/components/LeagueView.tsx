@@ -17,6 +17,9 @@ import {
   X,
   ArrowLeft,
   FileSpreadsheet,
+  ClipboardList,
+  Star,
+  Zap,
 } from 'lucide-react';
 import {
   League,
@@ -24,8 +27,11 @@ import {
   RecordedMatch,
   Player,
   NextGameSession,
+  WeeklyMvpResult,
+  StarOfTheNight,
 } from '../types/padel';
 import { LeagueGamesPanel } from './LeagueGamesPanel';
+import { PlayerGamesDrilldown } from './PlayerGamesDrilldown';
 import { getShortPlayerName } from '../utils/teamGenerator';
 import { PlayerAvatar } from './PlayerAvatar';
 
@@ -33,7 +39,15 @@ interface LeagueViewProps {
   leagues: League[];
   activeLeagueId: string;
   onSelectLeague: (id: string) => void;
+  players: Player[];
   standings: LeagueStanding[];
+  weeklyMvp: WeeklyMvpResult;
+  starOfTheNight: StarOfTheNight;
+  onUpdateStarOfTheNight: (params: {
+    playerId: string;
+    reason: string;
+    nominatedBy?: string;
+  }) => void;
   matches: RecordedMatch[];
   currentPlayer: Player;
   nextGameSession: NextGameSession | null;
@@ -41,6 +55,7 @@ interface LeagueViewProps {
   onOpenCreateGameSession: () => void;
   onOpenImportNextGames?: () => void;
   onOpenManagePlayers: () => void;
+  onOpenTasks: () => void;
   onRenamePlayer: (playerId: string, newName: string) => void;
   onUpdateFixtureDraftScore: (
     fixtureId: string,
@@ -87,7 +102,11 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
   leagues,
   activeLeagueId,
   onSelectLeague,
+  players,
   standings,
+  weeklyMvp,
+  starOfTheNight,
+  onUpdateStarOfTheNight,
   matches,
   currentPlayer,
   nextGameSession,
@@ -95,6 +114,7 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
   onOpenCreateGameSession,
   onOpenImportNextGames,
   onOpenManagePlayers,
+  onOpenTasks,
   onRenamePlayer,
   onUpdateFixtureDraftScore,
   onUpdateNextSessionDate,
@@ -107,6 +127,30 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
 }) => {
   const [expandedDateKeys, setExpandedDateKeys] = useState<Record<string, boolean>>({});
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
+  const [playerDrillModes, setPlayerDrillModes] = useState<
+    Record<string, 'last4' | 'last8' | undefined>
+  >({});
+
+  const togglePlayerDrill = (playerId: string) => {
+    setPlayerDrillModes((prev) => ({
+      ...prev,
+      [playerId]: prev[playerId] ? undefined : 'last4',
+    }));
+  };
+
+  const drillIntoPodiumPlayer = (playerId: string) => {
+    setPlayerDrillModes((prev) => ({
+      ...prev,
+      [playerId]: prev[playerId] || 'last4',
+    }));
+    const mobileEl = document.getElementById(`league-player-row-${playerId}`);
+    const desktopEl = document.getElementById(`league-player-row-desktop-${playerId}`);
+    const visibleEl =
+      desktopEl && desktopEl.offsetParent !== null ? desktopEl : mobileEl || desktopEl;
+    if (visibleEl) {
+      visibleEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
   const [internalGamesPanel, setInternalGamesPanel] = useState<'last' | 'next' | null>(null);
   const activeGamesPanel =
     controlledGamesPanel !== undefined ? controlledGamesPanel : internalGamesPanel;
@@ -175,10 +219,43 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
     return `Session Results${timeRange} — Add / View Date`;
   };
 
-  // Top 3 Rankings Podium
-  const top1 = standings[0];
-  const top2 = standings[1];
-  const top3 = standings[2];
+  // League Table Leader (#1 overall) + Star of the Night editing state (Olive - fighting Irish only)
+  const leader = standings[0];
+  const starPlayer =
+    players.find((p) => p.id === starOfTheNight.playerId) ||
+    players.find((p) => p.name.toLowerCase().includes('franny')) ||
+    players[0];
+  const starDisplayName = starPlayer?.name || starOfTheNight.playerName;
+
+  const canEditStarOfNight =
+    currentPlayer.id === 'p-olive' ||
+    currentPlayer.name.toLowerCase().includes('olive');
+
+  const [isEditingStar, setIsEditingStar] = useState(false);
+  const [draftStarPlayerId, setDraftStarPlayerId] = useState(starOfTheNight.playerId);
+  const [draftStarReason, setDraftStarReason] = useState(starOfTheNight.reason);
+  const [draftStarNominatedBy, setDraftStarNominatedBy] = useState(
+    starOfTheNight.nominatedBy || 'Folks who were there'
+  );
+
+  const openStarEditor = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDraftStarPlayerId(starPlayer?.id || starOfTheNight.playerId);
+    setDraftStarReason(starOfTheNight.reason);
+    setDraftStarNominatedBy(starOfTheNight.nominatedBy || 'Folks who were there');
+    setIsEditingStar(true);
+  };
+
+  const handleSaveStar = (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onUpdateStarOfTheNight({
+      playerId: draftStarPlayerId,
+      reason: draftStarReason,
+      nominatedBy: draftStarNominatedBy,
+    });
+    setIsEditingStar(false);
+  };
 
   const openFixturesCount = nextGameSession
     ? nextGameSession.fixtures.filter((f) => !f.completed).length
@@ -256,6 +333,16 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
                 <span>Import CSV / Sheet</span>
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={onOpenTasks}
+              title="Open Tasks (Scores -> Edit)"
+              className="px-2.5 @xl:px-3 py-1.5 rounded-xl bg-slate-600 hover:bg-slate-500 text-slate-100 border border-slate-400/50 text-[11px] @xl:text-xs font-bold flex items-center gap-1 shadow-sm transition cursor-pointer"
+            >
+              <ClipboardList className="w-3.5 h-3.5 text-slate-200 shrink-0" />
+              <span>Tasks</span>
+            </button>
 
             <button
               type="button"
@@ -353,12 +440,12 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
       ) : (
         <>
 
-      {/* TOP 3 RANKINGS PODIUM */}
+      {/* TOP SPOTLIGHT BAR: LEAGUE TABLE LEADER • CURRENT WEEK MVP (LAST GAMES) • STAR OF THE NIGHT */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between px-1">
           <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
             <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Top 3 Rankings</span>
+            <span>League Leader • Week MVP • Star of the Night</span>
           </span>
           <span className="text-[11px] text-slate-400 font-mono">
             {leagueMatches.length} Matches
@@ -366,101 +453,198 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
         </div>
 
         <div className="grid grid-cols-1 @2xl:grid-cols-3 gap-2.5 @xl:gap-3">
-          {/* #1 Leader */}
-          {top1 && (
-            <div className="p-3.5 @xl:p-4 rounded-3xl bg-gradient-to-b from-amber-500/25 via-slate-900 to-slate-900 border-2 border-amber-400/60 flex items-center gap-3 relative overflow-hidden shadow-xl shadow-amber-500/10">
-              <div className="w-9 h-9 @xl:w-10 @xl:h-10 rounded-2xl bg-gradient-to-br from-amber-300 to-yellow-500 flex items-center justify-center text-slate-950 font-black text-base shadow shrink-0">
-                1
+          {/* Card 1: League Table Leader */}
+          {leader && (
+            <div
+              onClick={() => drillIntoPodiumPlayer(leader.playerId)}
+              title={`Click to view ${leader.player.name}'s last 4 / last 8 games`}
+              className="p-3.5 @xl:p-4 rounded-3xl bg-gradient-to-b from-amber-500/25 via-slate-900 to-slate-900 border-2 border-amber-400/60 hover:border-amber-300 flex items-center gap-3 relative overflow-hidden shadow-xl shadow-amber-500/10 cursor-pointer transition"
+            >
+              <div className="w-9 h-9 @xl:w-10 @xl:h-10 rounded-2xl bg-gradient-to-br from-amber-300 to-yellow-500 flex items-center justify-center text-slate-950 font-black shadow shrink-0">
+                <Trophy className="w-5 h-5" />
               </div>
               <PlayerAvatar
-                name={top1.player.name}
+                name={leader.player.name}
                 className="w-11 h-11 @xl:w-12 @xl:h-12 rounded-2xl text-base ring-2 ring-amber-400"
               />
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <span className="text-[9px] font-black text-amber-400 uppercase tracking-wider block">
-                      👑 #1 LEADER
+                      👑 LEAGUE TABLE LEADER
                     </span>
-                    <p className="text-sm font-black text-white truncate">{top1.player.name}</p>
+                    <p className="text-sm font-black text-white truncate">
+                      {leader.player.name}
+                    </p>
                   </div>
                   <span className="text-base font-mono font-black text-amber-300 shrink-0">
-                    {top1.leaguePoints} pts
+                    {leader.leaguePoints} pts
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-slate-300 font-mono">
                   <span>
-                    {top1.won}W-{top1.lost}L ({top1.pointDiff >= 0 ? `+${top1.pointDiff}` : top1.pointDiff})
+                    {leader.won}W-{leader.lost}L (
+                    {leader.pointDiff >= 0 ? `+${leader.pointDiff}` : leader.pointDiff})
                   </span>
-                  <FormPills form={top1.form} />
+                  <FormPills form={leader.form} />
                 </div>
               </div>
             </div>
           )}
 
-          {/* #2 Runner-Up */}
-          {top2 && (
-            <div className="p-3.5 @xl:p-4 rounded-3xl bg-gradient-to-b from-slate-700/25 via-slate-900 to-slate-900 border border-slate-400/40 flex items-center gap-3 relative overflow-hidden shadow-lg">
-              <div className="w-9 h-9 @xl:w-10 @xl:h-10 rounded-2xl bg-slate-300 text-slate-950 flex items-center justify-center font-black text-base shadow shrink-0">
-                2
+          {/* Card 2: Current Week MVP (Evaluated from Last Games / Last 4 Games) */}
+          {weeklyMvp?.player && (
+            <div
+              onClick={() => drillIntoPodiumPlayer(weeklyMvp.player.id)}
+              title={`Evaluated from Last Games (${weeklyMvp.played} games) — click to view ${weeklyMvp.player.name}'s games`}
+              className="p-3.5 @xl:p-4 rounded-3xl bg-gradient-to-b from-sky-500/25 via-slate-900 to-slate-900 border-2 border-sky-400/50 hover:border-sky-300 flex items-center gap-3 relative overflow-hidden shadow-xl shadow-sky-500/10 cursor-pointer transition"
+            >
+              <div className="w-9 h-9 @xl:w-10 @xl:h-10 rounded-2xl bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center text-white font-black shadow shrink-0">
+                <Zap className="w-5 h-5 fill-white" />
               </div>
               <PlayerAvatar
-                name={top2.player.name}
-                className="w-11 h-11 @xl:w-12 @xl:h-12 rounded-2xl text-base ring-2 ring-slate-300"
+                name={weeklyMvp.player.name}
+                className="w-11 h-11 @xl:w-12 @xl:h-12 rounded-2xl text-base ring-2 ring-sky-400"
               />
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-wider block">
-                      🥈 #2 RANKED
+                    <span className="text-[9px] font-black text-sky-300 uppercase tracking-wider block truncate">
+                      ⚡ CURRENT WEEK MVP • LAST {weeklyMvp.played || 4} GAMES
                     </span>
-                    <p className="text-sm font-black text-white truncate">{top2.player.name}</p>
+                    <p className="text-sm font-black text-white truncate">
+                      {weeklyMvp.player.name}
+                    </p>
                   </div>
                   <span className="text-base font-mono font-black text-sky-300 shrink-0">
-                    {top2.leaguePoints} pts
+                    {weeklyMvp.weekPoints} pts
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-slate-300 font-mono">
                   <span>
-                    {top2.won}W-{top2.lost}L ({top2.pointDiff >= 0 ? `+${top2.pointDiff}` : top2.pointDiff})
+                    {weeklyMvp.won}W-{weeklyMvp.lost}L (
+                    {weeklyMvp.pointDiff >= 0
+                      ? `+${weeklyMvp.pointDiff}`
+                      : weeklyMvp.pointDiff}
+                    )
                   </span>
-                  <FormPills form={top2.form} />
+                  <FormPills form={weeklyMvp.form} />
                 </div>
               </div>
             </div>
           )}
 
-          {/* #3 Third Place */}
-          {top3 && (
-            <div className="p-3.5 @xl:p-4 rounded-3xl bg-gradient-to-b from-orange-600/20 via-slate-900 to-slate-900 border border-orange-500/40 flex items-center gap-3 relative overflow-hidden shadow-lg">
-              <div className="w-9 h-9 @xl:w-10 @xl:h-10 rounded-2xl bg-orange-500 text-white flex items-center justify-center font-black text-base shadow shrink-0">
-                3
-              </div>
-              <PlayerAvatar
-                name={top3.player.name}
-                className="w-11 h-11 @xl:w-12 @xl:h-12 rounded-2xl text-base ring-2 ring-orange-400"
-              />
-              <div className="min-w-0 flex-1 space-y-1">
+          {/* Card 3: Star of the Night (Nominated by folks who were there • Editable by Olive - fighting Irish) */}
+          <div
+            onClick={() => {
+              if (!isEditingStar && starPlayer) {
+                drillIntoPodiumPlayer(starPlayer.id);
+              }
+            }}
+            className={`p-3.5 @xl:p-4 rounded-3xl bg-gradient-to-b from-pink-500/25 via-slate-900 to-slate-900 border-2 border-pink-400/55 hover:border-pink-300 relative overflow-hidden shadow-xl shadow-pink-500/10 transition ${
+              isEditingStar ? '' : 'cursor-pointer flex items-center gap-3'
+            }`}
+          >
+            {isEditingStar && canEditStarOfNight ? (
+              <form onSubmit={handleSaveStar} className="space-y-2.5 text-xs w-full">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <span className="text-[9px] font-black text-orange-400 uppercase tracking-wider block">
-                      🥉 #3 RANKED
-                    </span>
-                    <p className="text-sm font-black text-white truncate">{top3.player.name}</p>
+                  <span className="text-[10px] font-black text-pink-300 uppercase tracking-wider flex items-center gap-1">
+                    <Star className="w-3.5 h-3.5 fill-pink-400 text-pink-400" />
+                    Edit Star of the Night
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsEditingStar(false);
+                    }}
+                    className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <select
+                  value={draftStarPlayerId}
+                  onChange={(e) => setDraftStarPlayerId(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs font-bold focus:outline-none focus:border-pink-400"
+                >
+                  {players.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="text"
+                  required
+                  value={draftStarReason}
+                  onChange={(e) => setDraftStarReason(e.target.value)}
+                  placeholder="Why they won (e.g. For her padel cat walk)"
+                  className="w-full px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-pink-400"
+                />
+
+                <div className="flex items-center justify-between gap-2">
+                  <input
+                    type="text"
+                    value={draftStarNominatedBy}
+                    onChange={(e) => setDraftStarNominatedBy(e.target.value)}
+                    placeholder="Nominated by..."
+                    className="flex-1 min-w-0 px-2.5 py-1 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-200 text-[11px] focus:outline-none focus:border-pink-400"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 rounded-xl bg-pink-500 hover:bg-pink-400 text-white font-black text-[11px] uppercase flex items-center gap-1 shrink-0 cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Save</span>
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <div className="w-9 h-9 @xl:w-10 @xl:h-10 rounded-2xl bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white font-black shadow shrink-0">
+                  <Star className="w-5 h-5 fill-white" />
+                </div>
+                <PlayerAvatar
+                  name={starDisplayName}
+                  className="w-11 h-11 @xl:w-12 @xl:h-12 rounded-2xl text-base ring-2 ring-pink-400"
+                />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="text-[9px] font-black text-pink-300 uppercase tracking-wider block">
+                        🌟 STAR OF THE NIGHT
+                      </span>
+                      <p className="text-sm font-black text-white truncate">
+                        {starDisplayName}
+                      </p>
+                    </div>
+
+                    {canEditStarOfNight && (
+                      <button
+                        type="button"
+                        onClick={openStarEditor}
+                        title="Edit Star of the Night (Olive - fighting Irish)"
+                        className="px-2 py-0.5 rounded-lg bg-pink-500/20 hover:bg-pink-500/30 text-pink-200 border border-pink-400/40 text-[10px] font-bold flex items-center gap-1 shrink-0 transition cursor-pointer"
+                      >
+                        <Pencil className="w-2.5 h-2.5" />
+                        <span>Edit</span>
+                      </button>
+                    )}
                   </div>
-                  <span className="text-base font-mono font-black text-orange-300 shrink-0">
-                    {top3.leaguePoints} pts
-                  </span>
+
+                  <p className="text-xs font-bold text-pink-200 italic truncate" title={starOfTheNight.reason}>
+                    “{starOfTheNight.reason}”
+                  </p>
+                  <p className="text-[10px] text-slate-400 truncate">
+                    Nominated by {starOfTheNight.nominatedBy || 'folks who were there'}
+                  </p>
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-slate-300 font-mono">
-                  <span>
-                    {top3.won}W-{top3.lost}L ({top3.pointDiff >= 0 ? `+${top3.pointDiff}` : top3.pointDiff})
-                  </span>
-                  <FormPills form={top3.form} />
-                </div>
-              </div>
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -473,7 +657,8 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
               <span>Full League Standings ({standings.length})</span>
             </h3>
             <p className="text-[11px] text-slate-400">
-              Form shows rolling results for the last set of games • Tap <Pencil className="w-3 h-3 inline text-slate-400" /> to edit any player name
+              Click any player row to drill into their <strong>Last 4 Games</strong> (with <strong>More</strong> for Last 8) • Tap{' '}
+              <Pencil className="w-3 h-3 inline text-slate-400" /> to rename
             </p>
           </div>
 
@@ -489,12 +674,21 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
           {standings.map((row) => {
             const isCurrent = row.playerId === currentPlayer.id;
             const isEditing = editingPlayerId === row.playerId;
+            const drillMode = playerDrillModes[row.playerId];
 
             return (
               <div
+                id={`league-player-row-${row.playerId}`}
                 key={row.playerId}
-                className={`p-3 space-y-2 transition-colors ${
-                  isCurrent ? 'bg-sky-500/10' : 'hover:bg-slate-800/40'
+                onClick={() => {
+                  if (!isEditing) togglePlayerDrill(row.playerId);
+                }}
+                className={`p-3 space-y-2 transition-colors cursor-pointer ${
+                  drillMode
+                    ? 'bg-sky-950/30'
+                    : isCurrent
+                    ? 'bg-sky-500/10'
+                    : 'hover:bg-slate-800/40'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -524,6 +718,7 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
 
                     {isEditing ? (
                       <form
+                        onClick={(e) => e.stopPropagation()}
                         onSubmit={(e) => {
                           e.preventDefault();
                           commitEditName(row.playerId);
@@ -563,7 +758,10 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
                         )}
                         <button
                           type="button"
-                          onClick={() => startEditName(row.player)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startEditName(row.player);
+                          }}
                           title={`Edit ${row.player.name}'s name`}
                           className="p-1 rounded-md text-slate-500 hover:text-sky-300 hover:bg-slate-800 transition shrink-0"
                         >
@@ -573,11 +771,20 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
                     )}
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <span className="font-mono font-black text-sm text-sky-400">
-                      {row.leaguePoints}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-right">
+                      <span className="font-mono font-black text-sm text-sky-400">
+                        {row.leaguePoints}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400 ml-0.5">pts</span>
+                    </div>
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg bg-slate-800/90 border border-slate-700 text-[10px] font-bold text-sky-300">
+                      {drillMode ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-sky-400" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                      )}
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400 ml-0.5">pts</span>
                   </div>
                 </div>
 
@@ -610,6 +817,23 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
 
                   <FormPills form={row.form} />
                 </div>
+
+                {drillMode && (
+                  <div className="pt-2">
+                    <PlayerGamesDrilldown
+                      player={row.player}
+                      matches={leagueMatches}
+                      weightedScoring={weightedScoring}
+                      mode={drillMode}
+                      onChangeMode={(nextMode) =>
+                        setPlayerDrillModes((prev) => ({ ...prev, [row.playerId]: nextMode }))
+                      }
+                      onClose={() =>
+                        setPlayerDrillModes((prev) => ({ ...prev, [row.playerId]: undefined }))
+                      }
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -621,12 +845,12 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
             <thead className="bg-slate-800/80 uppercase text-[10px] tracking-wider text-slate-400 font-black">
               <tr>
                 <th className="py-3 px-4 text-center">#</th>
-                <th className="py-3 px-4">Player</th>
+                <th className="py-3 px-4">Player (Click for Last 4 / 8 Games)</th>
                 <th className="py-3 px-2 text-center">MP</th>
                 <th className="py-3 px-2 text-center">W - L</th>
                 <th className="py-3 px-2 text-center">PW - PL</th>
                 <th className="py-3 px-2 text-center">Diff</th>
-                <th className="py-3 px-2 text-center">Form (Last Set)</th>
+                <th className="py-3 px-2 text-center">Form (Last 4)</th>
                 <th className="py-3 px-4 text-right">Pts</th>
               </tr>
             </thead>
@@ -634,135 +858,182 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
               {standings.map((row) => {
                 const isCurrent = row.playerId === currentPlayer.id;
                 const isEditing = editingPlayerId === row.playerId;
+                const drillMode = playerDrillModes[row.playerId];
 
                 return (
-                  <tr
-                    key={row.playerId}
-                    className={`transition-colors hover:bg-slate-800/50 ${
-                      isCurrent ? 'bg-sky-500/10 font-bold' : ''
-                    }`}
-                  >
-                    <td className="py-3 px-4 text-center">
-                      {row.rank === 1 ? (
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-black text-xs">
-                          1
-                        </span>
-                      ) : row.rank === 2 ? (
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-300 text-slate-950 font-black text-xs">
-                          2
-                        </span>
-                      ) : row.rank === 3 ? (
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-500 text-white font-black text-xs">
-                          3
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 font-mono font-bold text-xs">
-                          #{row.rank}
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-3">
-                        <PlayerAvatar
-                          name={isEditing && editingName.trim() ? editingName : row.player.name}
-                          className="w-8 h-8 rounded-full text-xs"
-                        />
-
-                        {isEditing ? (
-                          <form
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              commitEditName(row.playerId);
-                            }}
-                            className="flex items-center gap-1.5"
-                          >
-                            <input
-                              type="text"
-                              autoFocus
-                              value={editingName}
-                              onChange={(e) => setEditingName(e.target.value)}
-                              className="px-2.5 py-1 rounded-lg bg-slate-800 border border-sky-400 text-xs font-bold text-white focus:outline-none"
-                            />
-                            <button
-                              type="submit"
-                              title="Save name"
-                              className="p-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingPlayerId(null)}
-                              title="Cancel"
-                              className="p-1 rounded-lg bg-slate-800 text-slate-400"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </form>
+                  <React.Fragment key={row.playerId}>
+                    <tr
+                      id={`league-player-row-desktop-${row.playerId}`}
+                      onClick={() => {
+                        if (!isEditing) togglePlayerDrill(row.playerId);
+                      }}
+                      className={`transition-colors cursor-pointer ${
+                        drillMode
+                          ? 'bg-sky-950/35'
+                          : isCurrent
+                          ? 'bg-sky-500/10 font-bold hover:bg-sky-500/15'
+                          : 'hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <td className="py-3 px-4 text-center">
+                        {row.rank === 1 ? (
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-black text-xs">
+                            1
+                          </span>
+                        ) : row.rank === 2 ? (
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-300 text-slate-950 font-black text-xs">
+                            2
+                          </span>
+                        ) : row.rank === 3 ? (
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-500 text-white font-black text-xs">
+                            3
+                          </span>
                         ) : (
-                          <div className="min-w-0 flex items-center gap-1.5 group">
-                            <span className="font-bold text-white truncate">
-                              {row.player.name}
-                            </span>
-                            {isCurrent && (
-                              <span className="text-[9px] bg-sky-500/20 text-sky-400 px-1.5 py-0.2 rounded font-mono font-bold">
-                                YOU
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => startEditName(row.player)}
-                              title={`Edit ${row.player.name}'s name`}
-                              className="p-1 rounded-md text-slate-500 hover:text-sky-300 hover:bg-slate-800 transition"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                          </div>
+                          <span className="text-slate-400 font-mono font-bold text-xs">
+                            #{row.rank}
+                          </span>
                         )}
-                      </div>
-                    </td>
+                      </td>
 
-                    <td className="py-3 px-2 text-center font-mono">{row.played}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          <PlayerAvatar
+                            name={isEditing && editingName.trim() ? editingName : row.player.name}
+                            className="w-8 h-8 rounded-full text-xs"
+                          />
 
-                    <td className="py-3 px-2 text-center font-mono whitespace-nowrap">
-                      <span className="text-emerald-400 font-bold">{row.won}</span>
-                      <span className="text-slate-500">-</span>
-                      <span className="text-rose-400 font-bold">{row.lost}</span>
-                    </td>
+                          {isEditing ? (
+                            <form
+                              onClick={(e) => e.stopPropagation()}
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                commitEditName(row.playerId);
+                              }}
+                              className="flex items-center gap-1.5"
+                            >
+                              <input
+                                type="text"
+                                autoFocus
+                                value={editingName}
+                                onChange={(e) => setEditingName(e.target.value)}
+                                className="px-2.5 py-1 rounded-lg bg-slate-800 border border-sky-400 text-xs font-bold text-white focus:outline-none"
+                              />
+                              <button
+                                type="submit"
+                                title="Save name"
+                                className="p-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingPlayerId(null)}
+                                title="Cancel"
+                                className="p-1 rounded-lg bg-slate-800 text-slate-400"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </form>
+                          ) : (
+                            <div className="min-w-0 flex items-center gap-1.5 group">
+                              <span className="font-bold text-white group-hover:text-sky-300 transition truncate">
+                                {row.player.name}
+                              </span>
+                              {isCurrent && (
+                                <span className="text-[9px] bg-sky-500/20 text-sky-400 px-1.5 py-0.2 rounded font-mono font-bold">
+                                  YOU
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startEditName(row.player);
+                                }}
+                                title={`Edit ${row.player.name}'s name`}
+                                className="p-1 rounded-md text-slate-500 hover:text-sky-300 hover:bg-slate-800 transition"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-[10px] font-bold text-sky-300">
+                                <span>{drillMode === 'last8' ? 'Last 8' : 'Last 4'}</span>
+                                {drillMode ? (
+                                  <ChevronUp className="w-3 h-3 text-sky-400" />
+                                ) : (
+                                  <ChevronDown className="w-3 h-3 text-slate-400" />
+                                )}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
 
-                    <td className="py-3 px-2 text-center font-mono text-[11px] whitespace-nowrap">
-                      <span className="text-slate-200">{row.pointsWon}</span>
-                      <span className="text-slate-500">-</span>
-                      <span className="text-slate-400">{row.pointsLost}</span>
-                    </td>
+                      <td className="py-3 px-2 text-center font-mono">{row.played}</td>
 
-                    <td className="py-3 px-2 text-center font-mono font-bold">
-                      <span
-                        className={
-                          row.pointDiff > 0
-                            ? 'text-emerald-400'
-                            : row.pointDiff < 0
-                            ? 'text-rose-400'
-                            : 'text-slate-400'
-                        }
-                      >
-                        {row.pointDiff > 0 ? `+${row.pointDiff}` : row.pointDiff}
-                      </span>
-                    </td>
+                      <td className="py-3 px-2 text-center font-mono whitespace-nowrap">
+                        <span className="text-emerald-400 font-bold">{row.won}</span>
+                        <span className="text-slate-500">-</span>
+                        <span className="text-rose-400 font-bold">{row.lost}</span>
+                      </td>
 
-                    <td className="py-3 px-2 text-center">
-                      <div className="flex items-center justify-center">
-                        <FormPills form={row.form} />
-                      </div>
-                    </td>
+                      <td className="py-3 px-2 text-center font-mono text-[11px] whitespace-nowrap">
+                        <span className="text-slate-200">{row.pointsWon}</span>
+                        <span className="text-slate-500">-</span>
+                        <span className="text-slate-400">{row.pointsLost}</span>
+                      </td>
 
-                    <td className="py-3 px-4 text-right">
-                      <span className="font-mono font-black text-sm text-sky-400">
-                        {row.leaguePoints}
-                      </span>
-                    </td>
-                  </tr>
+                      <td className="py-3 px-2 text-center font-mono font-bold">
+                        <span
+                          className={
+                            row.pointDiff > 0
+                              ? 'text-emerald-400'
+                              : row.pointDiff < 0
+                              ? 'text-rose-400'
+                              : 'text-slate-400'
+                          }
+                        >
+                          {row.pointDiff > 0 ? `+${row.pointDiff}` : row.pointDiff}
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-2 text-center">
+                        <div className="flex items-center justify-center">
+                          <FormPills form={row.form} />
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-4 text-right">
+                        <span className="font-mono font-black text-sm text-sky-400">
+                          {row.leaguePoints}
+                        </span>
+                      </td>
+                    </tr>
+
+                    {drillMode && (
+                      <tr className="bg-slate-950/60">
+                        <td colSpan={8} className="px-4 py-3">
+                          <PlayerGamesDrilldown
+                            player={row.player}
+                            matches={leagueMatches}
+                            weightedScoring={weightedScoring}
+                            mode={drillMode}
+                            onChangeMode={(nextMode) =>
+                              setPlayerDrillModes((prev) => ({
+                                ...prev,
+                                [row.playerId]: nextMode,
+                              }))
+                            }
+                            onClose={() =>
+                              setPlayerDrillModes((prev) => ({
+                                ...prev,
+                                [row.playerId]: undefined,
+                              }))
+                            }
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </tbody>

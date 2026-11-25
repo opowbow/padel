@@ -7,14 +7,15 @@ import {
   Sparkles,
   ChevronDown,
   Info,
-  Flame,
   Users,
   Cloud,
+  ClipboardList,
 } from 'lucide-react';
 import { Player } from '../types/padel';
 import { CloudSyncStatus } from '../hooks/usePadelState';
 import { getRankingBadge } from '../utils/rankingData';
 import { PlayerAvatar } from './PlayerAvatar';
+import { PadelLogo } from './PadelLogo';
 
 interface HeaderProps {
   currentPlayer: Player;
@@ -22,6 +23,7 @@ interface HeaderProps {
   onSelectPlayer: (id: string) => void;
   onOpenSignUp: () => void;
   onOpenMembers?: () => void;
+  onOpenTasks?: () => void;
   onGoHome?: () => void;
   viewMode: 'web' | 'mobile';
   onToggleViewMode: (mode: 'web' | 'mobile') => void;
@@ -37,6 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectPlayer,
   onOpenSignUp,
   onOpenMembers,
+  onOpenTasks,
   onGoHome,
   viewMode,
   onToggleViewMode,
@@ -60,12 +63,12 @@ export const Header: React.FC<HeaderProps> = ({
           className="flex items-center space-x-2.5 sm:space-x-3 min-w-0 text-left cursor-pointer group"
         >
           <div className="relative shrink-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-sky-400 via-blue-600 to-pink-500 flex items-center justify-center shadow-lg shadow-sky-500/25 transform group-hover:rotate-6 transition-transform">
-              <Flame className="w-5 h-5 sm:w-6 sm:h-6 text-white fill-white" />
+            <div className="rounded-xl shadow-lg shadow-sky-500/25 transform group-hover:rotate-6 transition-transform">
+              <PadelLogo className="w-10 h-10 sm:w-11 sm:h-11" />
             </div>
             <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-sky-500"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-lime-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-lime-400"></span>
             </span>
           </div>
 
@@ -80,7 +83,7 @@ export const Header: React.FC<HeaderProps> = ({
                   cloudSyncStatus === 'saving' || cloudSyncStatus === 'loading'
                     ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
                     : cloudSyncStatus === 'offline'
-                    ? 'bg-slate-800 text-slate-400 border-slate-700'
+                    ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
                     : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                 }`}
               >
@@ -91,7 +94,7 @@ export const Header: React.FC<HeaderProps> = ({
                     : cloudSyncStatus === 'loading'
                     ? 'Syncing...'
                     : cloudSyncStatus === 'offline'
-                    ? 'Local'
+                    ? 'Local (Unsynced)'
                     : 'Saved'}
                 </span>
               </span>
@@ -129,8 +132,19 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* Right Section: Member list button, Weighted wins toggle, & Player profile switcher */}
+        {/* Right Section: Tasks grey button, Member list button, Weighted wins toggle, & Player profile switcher */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {onOpenTasks && (
+            <button
+              type="button"
+              onClick={onOpenTasks}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-600 hover:bg-slate-500 text-slate-100 border border-slate-400/50 shadow-sm transition cursor-pointer"
+            >
+              <ClipboardList className="w-3.5 h-3.5 text-slate-200 shrink-0" />
+              <span>Tasks</span>
+            </button>
+          )}
+
           {/* Join Member List button */}
           {onOpenMembers && (
             <button
