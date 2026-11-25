@@ -408,7 +408,7 @@ export const LeagueView: React.FC<LeagueViewProps> = ({
           <button
             type="button"
             onClick={onOpenCreateGameSession}
-            className="py-2 @xl:py-2.5 px-1.5 @xl:px-4 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:from-pink-400 hover:to-orange-400 text-white font-black text-[10px] @xl:text-xs uppercase tracking-wide flex flex-col @lg:flex-row items-center justify-center gap-1 @lg:gap-1.5 shadow-lg shadow-pink-500/25 transition min-w-0"
+            className="py-2 @xl:py-2.5 px-1.5 @xl:px-4 rounded-2xl font-black text-[10px] @xl:text-xs uppercase tracking-wide flex flex-col @lg:flex-row items-center justify-center gap-1 @lg:gap-1.5 transition border min-w-0 bg-slate-950/80 hover:bg-slate-800 text-pink-300 border-pink-500/40 cursor-pointer"
           >
             <Shuffle className="w-3.5 h-3.5 @xl:w-4 @xl:h-4 shrink-0" />
             <span className="truncate">Create Game</span>
